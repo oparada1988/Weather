@@ -95,7 +95,7 @@ def twc_to_wmo(code):
     return mapping.get(code, 0)
 
 
-class WindDirection(ActionBase):
+class WeatherPlusWindDirection(ActionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.show_interval = 30  # minutes
@@ -209,8 +209,7 @@ class WindDirection(ActionBase):
             return
         # Stop timer if active
         if self.show_timer is not None:
-            if self.show_timer.is_alive:
-                self.show_timer.cancel()
+            self.show_timer.cancel()
 
         wind_data = self.get_wind_data(force=force)
         if wind_data is None:
@@ -242,7 +241,7 @@ class WindDirection(ActionBase):
         return Gtk.Label(label=self.plugin_base.lm.get("actions.open-meteo-thanks"))
 
 
-class Weather(ActionBase):
+class WeatherPlusWeather(ActionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.show_interval = 30  # minutes
@@ -418,8 +417,7 @@ class Weather(ActionBase):
             return
         # Stop timer if active
         if self.show_timer is not None:
-            if self.show_timer.is_alive:
-                self.show_timer.cancel()
+            self.show_timer.cancel()
 
         weather = self.get_weather(force=force)
         if weather is None:
@@ -966,7 +964,7 @@ class Weather(ActionBase):
         return "sunny"
 
 
-class WeatherPlugin(PluginBase):
+class WeatherPlusPlugin(PluginBase):
     def __init__(self):
         super().__init__()
         self.init_locale_manager()
@@ -977,7 +975,7 @@ class WeatherPlugin(PluginBase):
         ## Register actions
         self.wind_direction_holder = ActionHolder(
             plugin_base=self,
-            action_base=WindDirection,
+            action_base=WeatherPlusWindDirection,
             action_id_suffix="WindDirection",
             action_name=self.lm.get("actions.wind-direction.name"),
             icon=Gtk.Image(icon_name="weather-windy-symbolic"),
@@ -991,7 +989,7 @@ class WeatherPlugin(PluginBase):
 
         self.weather_holder = ActionHolder(
             plugin_base=self,
-            action_base=Weather,
+            action_base=WeatherPlusWeather,
             action_id_suffix="Weather",
             action_name=self.lm.get("actions.weather.name"),
             icon=Gtk.Image(icon_name="weather-clear-symbolic"),
