@@ -430,7 +430,21 @@ class Weather(ActionBase):
         else:
             image = self.render_button_image(weather)
             self.set_media(image=image, size=1.0, valign=0, halign=0)
-            self.set_bottom_label("")
+            
+            current = weather.get("current", {})
+            temp = current.get("temperature", 0)
+            temp_unit = current.get("temperature_unit", "°C")
+            action_settings = self.get_settings()
+            location_name = action_settings.get("location_name", "Weather")
+            
+            temp_text = f"{int(temp)}{temp_unit}"
+            loc_display = location_name
+            if len(loc_display) > 16:
+                loc_display = loc_display[:14] + ".."
+            
+            self.set_top_label("")
+            self.set_center_label(temp_text, font_size=16, color=[255, 255, 255, 255], outline_width=2, outline_color=[0, 0, 0, 255])
+            self.set_bottom_label(loc_display, font_size=9, color=[255, 255, 255, 255], outline_width=2, outline_color=[0, 0, 0, 255])
 
         # Launch timer
         self.show_timer = Timer(self.show_interval * 60, self.show)
@@ -918,8 +932,6 @@ class Weather(ActionBase):
             draw = ImageDraw.Draw(canvas)
             draw.rectangle([0, 0, width, height], fill=(0, 0, 0, 255))
             
-        draw = ImageDraw.Draw(canvas)
-        
         # Paste weather icon in the center/upper part
         weather_code = current.get("weather_code", 0)
         image_name = self.get_image_to_show(weather_code, not is_day)
@@ -927,20 +939,6 @@ class Weather(ActionBase):
         if icon_img:
             canvas.paste(icon_img, (34, 12), icon_img)
             
-        # Draw temperature and location text
-        temp = current.get("temperature", 0)
-        temp_unit = current.get("temperature_unit", "°C")
-        action_settings = self.get_settings()
-        location_name = action_settings.get("location_name", "Weather")
-        
-        temp_text = f"{int(temp)}{temp_unit}"
-        draw.text((width / 2, 68), temp_text, font=self.font_button_temp, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
-        
-        loc_display = location_name
-        if len(loc_display) > 16:
-            loc_display = loc_display[:14] + ".."
-        draw.text((width / 2, 88), loc_display, font=self.font_button_loc, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
-        
         return canvas
 
     def get_image_to_show(self, weather_code: int, night: bool) -> str:
