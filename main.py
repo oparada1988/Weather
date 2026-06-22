@@ -448,7 +448,7 @@ class Weather(ActionBase):
 
         # Cycle Interval Row (only for dials)
         self.cycle_model = Gtk.ListStore.new([str, int])
-        self.cycle_model.append(["Disabled", 0])
+        self.cycle_model.append(["Off", 0])
         self.cycle_model.append(["Every 15 Minutes", 15])
         self.cycle_model.append(["Every 30 Minutes", 30])
         self.cycle_model.append(["Every 45 Minutes", 45])
