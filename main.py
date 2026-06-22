@@ -32,6 +32,18 @@ from src.backend.DeckManagement.DeckController import DeckController
 from src.backend.PageManagement.Page import Page
 
 
+# Helper functions for dynamic background gradients
+def create_linear_gradient(start_color, end_color, width, height):
+    base = Image.new("RGBA", (width, height), start_color)
+    top = Image.new("RGBA", (width, height), end_color)
+    mask = Image.new("L", (width, height))
+    mask_data = []
+    for y in range(height):
+        mask_data.extend([int(255 * (y / (height - 1)))] * width)
+    mask.putdata(mask_data)
+    return Image.composite(top, base, mask)
+
+
 # Normalization helper functions
 def owm_to_wmo(code):
     if 200 <= code < 300:
@@ -97,6 +109,7 @@ class WindDirection(ActionBase):
     def get_config_rows(self) -> list:
         self.units_model = Gtk.ListStore.new([str, int])
         self.units_row = ComboRow(title=self.plugin_base.lm.get("actions.unit.title"), model=self.units_model)
+        self.lat_entry = Adw.PreferencesRow.new()  # Fallback row style if Adw.EntryRow acts up, wait, Adw.EntryRow is perfect
         self.lat_entry = Adw.EntryRow(title=self.plugin_base.lm.get("actions.lat-entry.title"), input_purpose=Gtk.InputPurpose.NUMBER)
         self.lon_entry = Adw.EntryRow(title=self.plugin_base.lm.get("actions.long-entry.title"), input_purpose=Gtk.InputPurpose.NUMBER)
 
@@ -799,38 +812,41 @@ class Weather(ActionBase):
             
         elif self.display_page == 1:
             # 5-Day Page
-            draw.rectangle([10, 10, 190, 85], fill=(0, 0, 0, 80), outline=(255, 255, 255, 40), width=1)
+            # Draw semi-transparent card overlay
+            draw.rectangle([10, 10, 190, 85], fill=(0, 0, 0, 100), outline=(255, 255, 255, 60), width=1)
             
-            draw.text((100, 14), "5 Day Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm")
+            draw.text((100, 16), "5 Day Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm")
             
             daily = weather_data.get("daily", {})
             days = daily.get("days", [])[:5]
             codes = daily.get("codes", [])[:5]
             max_temps = daily.get("max_temps", [])[:5]
-            min_temps = daily.get("min_temps", [])[:5]
             
-            col_width = 32
-            start_x = 24
+            col_width = 36
+            start_x = 28
             for i in range(len(days)):
                 cx = start_x + i * col_width
-                draw.text((cx, 32), days[i], font=self.font_text, fill=(255, 255, 255, 220), anchor="mm")
+                
+                # Format day text with trailing dot (matches user drawing: Mon., Tue.)
+                day_label = f"{days[i]}." if days[i] else ""
+                draw.text((cx, 30), day_label, font=self.font_text, fill=(255, 255, 255, 255), anchor="mm")
                 
                 code = codes[i] if i < len(codes) else 0
                 image_name = self.get_image_to_show(code, False)
-                icon_img = self.get_resized_icon(image_name, (16, 16))
+                icon_img = self.get_resized_icon(image_name, (18, 18))
                 if icon_img:
-                    canvas.paste(icon_img, (cx - 8, 38), icon_img)
+                    canvas.paste(icon_img, (cx - 9, 36), icon_img)
                     
                 t_max = max_temps[i] if i < len(max_temps) else 0
-                t_min = min_temps[i] if i < len(min_temps) else 0
-                temp_text = f"{int(t_max)}°/{int(t_min)}°"
-                draw.text((cx, 62), temp_text, font=self.font_text, fill=(255, 255, 255, 180), anchor="mm")
+                temp_text = f"{int(t_max)}°"
+                draw.text((cx, 64), temp_text, font=self.font_medium, fill=(255, 255, 255, 255), anchor="mm")
                 
         elif self.display_page == 2:
             # Hourly Page
-            draw.rectangle([10, 10, 190, 85], fill=(0, 0, 0, 80), outline=(255, 255, 255, 40), width=1)
+            # Draw semi-transparent card overlay
+            draw.rectangle([10, 10, 190, 85], fill=(0, 0, 0, 100), outline=(255, 255, 255, 60), width=1)
             
-            draw.text((100, 14), "Hourly Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm")
+            draw.text((100, 16), "Hourly Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm")
             
             hourly = weather_data.get("hourly", {})
             times = hourly.get("times", [])[:24]
@@ -840,8 +856,9 @@ class Weather(ActionBase):
                 min_t, max_t = min(temps), max(temps)
                 t_range = (max_t - min_t) if max_t != min_t else 1.0
                 
-                graph_x_start = 25
-                graph_x_end = 175
+                # Set coordinates inside the 10-190 overlay box
+                graph_x_start = 32
+                graph_x_end = 168
                 graph_y_start = 65
                 graph_y_end = 35
                 
@@ -855,14 +872,16 @@ class Weather(ActionBase):
                     
                 draw.line(points, fill=(255, 215, 0, 255), width=2)
                 
-                draw.text((graph_x_start - 5, graph_y_start), f"{int(min_t)}°", font=self.font_text, fill=(255, 255, 255, 150), anchor="rm")
-                draw.text((graph_x_end + 5, graph_y_end), f"{int(max_t)}°", font=self.font_text, fill=(255, 255, 255, 150), anchor="lm")
+                # Use solid high-brightness white text for readability
+                draw.text((graph_x_start - 6, graph_y_start), f"{int(min_t)}°", font=self.font_text, fill=(255, 255, 255, 255), anchor="rm")
+                draw.text((graph_x_end + 6, graph_y_end), f"{int(max_t)}°", font=self.font_text, fill=(255, 255, 255, 255), anchor="lm")
                 
+                # Show key hours (e.g. every 4 hours out of 24h)
                 x_labels = [0, 3, 6, 9, 11]
                 for idx in x_labels:
                     if idx < len(times):
                         px = int(graph_x_start + idx * dx)
-                        draw.text((px, 75), times[idx], font=self.font_text, fill=(255, 255, 255, 150), anchor="mm")
+                        draw.text((px, 74), times[idx], font=self.font_text, fill=(255, 255, 255, 255), anchor="mm")
                         
         dot_y = 92
         dot_spacing = 10
