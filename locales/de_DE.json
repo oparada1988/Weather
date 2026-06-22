@@ -1,5 +1,5 @@
 {
-    "plugin.name": "Wetter",
+    "plugin.name": "Wetter Plus",
     "actions.lat-entry.title": "Breitengrad",
     "actions.long-entry.title": "Längengrad",
     "actions.open-meteo-thanks": "Dank an open-meteo für die Bereitstellung einer so gutenAPI",

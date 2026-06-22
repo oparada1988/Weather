@@ -1,8 +1,8 @@
 {
     "version": "1.0.0",
     "thumbnail": "store/Thumbnail.png",
-    "id": "com_core447_Weather",
-    "name": "Weather",
+    "id": "com_oparada1988_Weather-Plus",
+    "name": "Weather Plus",
     "descriptions": {
         "en_US": "Displays the current weather for the selected location"
     },
