@@ -9,7 +9,7 @@ from src.backend.PluginManager.ActionInputSupport import ActionInputSupport
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw
+from gi.repository import Gtk, Adw, Gdk, Pango
 
 import sys
 import os
@@ -328,6 +328,39 @@ class Weather(ActionBase):
             except Exception:
                 return ImageFont.load_default()
 
+    def resolve_font_from_desc(self, font_desc_str, default_size):
+        try:
+            desc = Pango.FontDescription.from_string(font_desc_str)
+            family = desc.get_family()
+            weight = desc.get_weight()
+            style = desc.get_style()
+            size = desc.get_size() / Pango.SCALE
+            
+            if size <= 0:
+                size = default_size
+                
+            query = family
+            style_list = []
+            if weight >= 700:
+                style_list.append("Bold")
+            if style == 2: # ITALIC
+                style_list.append("Italic")
+            elif style == 1: # OBLIQUE
+                style_list.append("Oblique")
+                
+            if style_list:
+                query += f":style={' '.join(style_list)}"
+                
+            import subprocess
+            result = subprocess.run(["fc-match", "-f", "%{file}\n", query], capture_output=True, text=True)
+            path = result.stdout.strip()
+            if path and os.path.exists(path):
+                return self.get_font(path, int(size))
+        except Exception as e:
+            log.error(f"Error parsing font description '{font_desc_str}': {e}")
+            
+        return self.get_font("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(default_size))
+
     def on_ready(self):
         self.show()
 
@@ -369,9 +402,41 @@ class Weather(ActionBase):
         self.lon_entry = Adw.EntryRow(title=self.plugin_base.lm.get("actions.long-entry.title"), input_purpose=Gtk.InputPurpose.NUMBER)
         self.loc_entry = Adw.EntryRow(title="Location Name")
 
-        self.font_path_entry = Adw.EntryRow(title="Font Path (.ttf)")
-        self.font_size_temp_entry = Adw.EntryRow(title="Temperature Font Size", input_purpose=Gtk.InputPurpose.NUMBER)
-        self.font_size_loc_entry = Adw.EntryRow(title="Location Font Size", input_purpose=Gtk.InputPurpose.NUMBER)
+        # Temperature Style Expander and rows
+        self.temp_expander = Adw.ExpanderRow(title="Temperature Style")
+        
+        self.temp_font_row = Adw.ActionRow(title="Font")
+        self.temp_font_btn = Gtk.FontButton()
+        self.temp_font_row.add_suffix(self.temp_font_btn)
+        self.temp_expander.add_row(self.temp_font_row)
+        
+        self.temp_outline_width_row = Adw.ActionRow(title="Outline Width")
+        self.temp_outline_width_spin = Gtk.SpinButton.new_with_range(0, 10, 1)
+        self.temp_outline_width_row.add_suffix(self.temp_outline_width_spin)
+        self.temp_expander.add_row(self.temp_outline_width_row)
+        
+        self.temp_outline_color_row = Adw.ActionRow(title="Outline Color")
+        self.temp_outline_color_btn = Gtk.ColorButton()
+        self.temp_outline_color_row.add_suffix(self.temp_outline_color_btn)
+        self.temp_expander.add_row(self.temp_outline_color_row)
+
+        # Location Style Expander and rows
+        self.loc_expander = Adw.ExpanderRow(title="Location Style")
+        
+        self.loc_font_row = Adw.ActionRow(title="Font")
+        self.loc_font_btn = Gtk.FontButton()
+        self.loc_font_row.add_suffix(self.loc_font_btn)
+        self.loc_expander.add_row(self.loc_font_row)
+        
+        self.loc_outline_width_row = Adw.ActionRow(title="Outline Width")
+        self.loc_outline_width_spin = Gtk.SpinButton.new_with_range(0, 10, 1)
+        self.loc_outline_width_row.add_suffix(self.loc_outline_width_spin)
+        self.loc_expander.add_row(self.loc_outline_width_row)
+        
+        self.loc_outline_color_row = Adw.ActionRow(title="Outline Color")
+        self.loc_outline_color_btn = Gtk.ColorButton()
+        self.loc_outline_color_row.add_suffix(self.loc_outline_color_btn)
+        self.loc_expander.add_row(self.loc_outline_color_row)
 
         self.units_cell_renderer = Gtk.CellRendererText()
         self.units_row.combo_box.pack_start(self.units_cell_renderer, True)
@@ -384,13 +449,19 @@ class Weather(ActionBase):
         self.lat_entry.connect("notify::text", self.on_lat_changed)
         self.lon_entry.connect("notify::text", self.on_lon_changed)
         self.loc_entry.connect("notify::text", self.on_loc_changed)
-        self.font_path_entry.connect("notify::text", self.on_font_path_changed)
-        self.font_size_temp_entry.connect("notify::text", self.on_font_size_temp_changed)
-        self.font_size_loc_entry.connect("notify::text", self.on_font_size_loc_changed)
+        
+        self.temp_font_btn.connect("font-set", self.on_temp_font_changed)
+        self.temp_outline_width_spin.connect("value-changed", self.on_temp_outline_width_changed)
+        self.temp_outline_color_btn.connect("color-set", self.on_temp_outline_color_changed)
+        
+        self.loc_font_btn.connect("font-set", self.on_loc_font_changed)
+        self.loc_outline_width_spin.connect("value-changed", self.on_loc_outline_width_changed)
+        self.loc_outline_color_btn.connect("color-set", self.on_loc_outline_color_changed)
+        
         self.units_row.combo_box.connect("changed", self.on_units_changed)
 
-        return [self.loc_entry, self.lat_entry, self.lon_entry, self.units_row, self.font_path_entry, self.font_size_temp_entry, self.font_size_loc_entry]
-    
+        return [self.loc_entry, self.lat_entry, self.lon_entry, self.units_row, self.temp_expander, self.loc_expander]
+
     def load_units_model(self):
         self.units_model.append([self.plugin_base.lm.get("actions.units.celsius"), 1])
         self.units_model.append([self.plugin_base.lm.get("actions.units.fahrenheit"), 2])
@@ -423,27 +494,41 @@ class Weather(ActionBase):
         self.set_settings(settings)
         self.show(force=True)
 
-    def on_font_path_changed(self, entry, *args):
+    def on_temp_font_changed(self, btn, *args):
         settings = self.get_settings()
-        settings["font_path"] = entry.get_text()
+        settings["font_desc_temp"] = btn.get_font()
         self.set_settings(settings)
         self.show(force=True)
 
-    def on_font_size_temp_changed(self, entry, *args):
+    def on_temp_outline_width_changed(self, spin, *args):
         settings = self.get_settings()
-        try:
-            settings["font_size_temp"] = int(entry.get_text())
-        except ValueError:
-            settings["font_size_temp"] = 16
+        settings["outline_width_temp"] = int(spin.get_value())
         self.set_settings(settings)
         self.show(force=True)
 
-    def on_font_size_loc_changed(self, entry, *args):
+    def on_temp_outline_color_changed(self, btn, *args):
         settings = self.get_settings()
-        try:
-            settings["font_size_loc"] = int(entry.get_text())
-        except ValueError:
-            settings["font_size_loc"] = 9
+        rgba = btn.get_rgba()
+        settings["outline_color_temp"] = [int(rgba.red * 255), int(rgba.green * 255), int(rgba.blue * 255), int(rgba.alpha * 255)]
+        self.set_settings(settings)
+        self.show(force=True)
+
+    def on_loc_font_changed(self, btn, *args):
+        settings = self.get_settings()
+        settings["font_desc_loc"] = btn.get_font()
+        self.set_settings(settings)
+        self.show(force=True)
+
+    def on_loc_outline_width_changed(self, spin, *args):
+        settings = self.get_settings()
+        settings["outline_width_loc"] = int(spin.get_value())
+        self.set_settings(settings)
+        self.show(force=True)
+
+    def on_loc_outline_color_changed(self, btn, *args):
+        settings = self.get_settings()
+        rgba = btn.get_rgba()
+        settings["outline_color_loc"] = [int(rgba.red * 255), int(rgba.green * 255), int(rgba.blue * 255), int(rgba.alpha * 255)]
         self.set_settings(settings)
         self.show(force=True)
 
@@ -452,9 +537,30 @@ class Weather(ActionBase):
         self.lat_entry.set_text(settings.get("lat", ""))  # Does not accept None
         self.lon_entry.set_text(settings.get("lon", ""))  # Does not accept None
         self.loc_entry.set_text(settings.get("location_name", "Washington DC"))
-        self.font_path_entry.set_text(settings.get("font_path", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
-        self.font_size_temp_entry.set_text(str(settings.get("font_size_temp", 16)))
-        self.font_size_loc_entry.set_text(str(settings.get("font_size_loc", 9)))
+
+        # Temp Style Row Values
+        self.temp_font_btn.set_font(settings.get("font_desc_temp", "DejaVu Sans Bold 16"))
+        self.temp_outline_width_spin.set_value(float(settings.get("outline_width_temp", 2)))
+        
+        rgba_temp = Gdk.RGBA()
+        color_temp = settings.get("outline_color_temp", [0, 0, 0, 255])
+        rgba_temp.red = color_temp[0] / 255.0
+        rgba_temp.green = color_temp[1] / 255.0
+        rgba_temp.blue = color_temp[2] / 255.0
+        rgba_temp.alpha = color_temp[3] / 255.0
+        self.temp_outline_color_btn.set_rgba(rgba_temp)
+
+        # Loc Style Row Values
+        self.loc_font_btn.set_font(settings.get("font_desc_loc", "DejaVu Sans Bold 9"))
+        self.loc_outline_width_spin.set_value(float(settings.get("outline_width_loc", 2)))
+        
+        rgba_loc = Gdk.RGBA()
+        color_loc = settings.get("outline_color_loc", [0, 0, 0, 255])
+        rgba_loc.red = color_loc[0] / 255.0
+        rgba_loc.green = color_loc[1] / 255.0
+        rgba_loc.blue = color_loc[2] / 255.0
+        rgba_loc.alpha = color_loc[3] / 255.0
+        self.loc_outline_color_btn.set_rgba(rgba_loc)
 
         if settings.get("unit") == 2:  # Imperial
             self.units_row.combo_box.set_active(1)
@@ -817,11 +923,46 @@ class Weather(ActionBase):
         draw = ImageDraw.Draw(canvas)
         
         settings = self.get_settings()
-        font_path = settings.get("font_path", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+        font_desc_temp = settings.get("font_desc_temp", "DejaVu Sans Bold 16")
+        
+        # Extract family, weight, style using Pango to resolve font path
+        try:
+            desc = Pango.FontDescription.from_string(font_desc_temp)
+            family = desc.get_family()
+            weight = desc.get_weight()
+            style = desc.get_style()
+            
+            query = family
+            style_list = []
+            if weight >= 700:
+                style_list.append("Bold")
+            if style == 2:
+                style_list.append("Italic")
+            elif style == 1:
+                style_list.append("Oblique")
+                
+            if style_list:
+                query += f":style={' '.join(style_list)}"
+                
+            import subprocess
+            result = subprocess.run(["fc-match", "-f", "%{file}\n", query], capture_output=True, text=True)
+            font_path = result.stdout.strip()
+        except Exception:
+            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            
+        if not font_path or not os.path.exists(font_path):
+            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
         font_large = self.get_font(font_path, 28)
         font_medium = self.get_font(font_path, 12)
         font_title = self.get_font(font_path, 10)
         font_text = self.get_font(font_path, 8)
+
+        outline_width_temp = int(settings.get("outline_width_temp", 2))
+        outline_color_temp = tuple(settings.get("outline_color_temp", [0, 0, 0, 255]))
+        
+        outline_width_loc = int(settings.get("outline_width_loc", 2))
+        outline_color_loc = tuple(settings.get("outline_color_loc", [0, 0, 0, 255]))
 
         current = weather_data.get("current", {})
         is_day = current.get("is_day", True)
@@ -872,8 +1013,8 @@ class Weather(ActionBase):
             location_name = action_settings.get("location_name", "Weather")
             
             temp_text = f"{int(temp)}{temp_unit}"
-            draw.text((95, 15), temp_text, font=font_large, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
-            draw.text((95, 50), location_name, font=font_medium, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
+            draw.text((95, 15), temp_text, font=font_large, fill=(255, 255, 255, 255), stroke_width=outline_width_temp, stroke_fill=outline_color_temp)
+            draw.text((95, 50), location_name, font=font_medium, fill=(255, 255, 255, 255), stroke_width=outline_width_loc, stroke_fill=outline_color_loc)
             
         elif self.display_page == 1:
             # 5-Day Page
@@ -993,28 +1134,27 @@ class Weather(ActionBase):
         action_settings = self.get_settings()
         location_name = action_settings.get("location_name", "Weather")
         
-        font_path = action_settings.get("font_path", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
-        try:
-            font_size_temp = int(action_settings.get("font_size_temp", 16))
-        except ValueError:
-            font_size_temp = 16
-        try:
-            font_size_loc = int(action_settings.get("font_size_loc", 9))
-        except ValueError:
-            font_size_loc = 9
+        font_desc_temp = action_settings.get("font_desc_temp", "DejaVu Sans Bold 16")
+        font_desc_loc = action_settings.get("font_desc_loc", "DejaVu Sans Bold 9")
+        
+        outline_width_temp = int(action_settings.get("outline_width_temp", 2))
+        outline_width_loc = int(action_settings.get("outline_width_loc", 2))
+        
+        outline_color_temp = tuple(action_settings.get("outline_color_temp", [0, 0, 0, 255]))
+        outline_color_loc = tuple(action_settings.get("outline_color_loc", [0, 0, 0, 255]))
 
-        font_temp = self.get_font(font_path, font_size_temp)
-        font_loc = self.get_font(font_path, font_size_loc)
+        font_temp = self.resolve_font_from_desc(font_desc_temp, 16)
+        font_loc = self.resolve_font_from_desc(font_desc_loc, 9)
 
         draw = ImageDraw.Draw(canvas)
 
         temp_text = f"{int(temp)}{temp_unit}"
-        draw.text((width / 2, 68), temp_text, font=font_temp, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+        draw.text((width / 2, 68), temp_text, font=font_temp, fill=(255, 255, 255, 255), anchor="mm", stroke_width=outline_width_temp, stroke_fill=outline_color_temp)
         
         loc_display = location_name
         if len(loc_display) > 16:
             loc_display = loc_display[:14] + ".."
-        draw.text((width / 2, 88), loc_display, font=font_loc, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+        draw.text((width / 2, 88), loc_display, font=font_loc, fill=(255, 255, 255, 255), anchor="mm", stroke_width=outline_width_loc, stroke_fill=outline_color_loc)
         
         return canvas
 
