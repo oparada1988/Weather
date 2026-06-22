@@ -1,4 +1,3 @@
-import json
 from GtkHelper.GtkHelper import ComboRow
 from src.backend.PluginManager.ActionBase import ActionBase
 from src.backend.PluginManager.PluginBase import PluginBase
@@ -10,7 +9,7 @@ from src.backend.PluginManager.ActionInputSupport import ActionInputSupport
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, Gio
+from gi.repository import Gtk, Adw
 
 import sys
 import os
@@ -26,22 +25,6 @@ sys.path.append(os.path.dirname(__file__))
 
 # Import globals
 import globals as gl
-
-# Import own modules
-from src.backend.DeckManagement.DeckController import DeckController
-from src.backend.PageManagement.Page import Page
-
-
-# Helper functions for dynamic background gradients
-def create_linear_gradient(start_color, end_color, width, height):
-    base = Image.new("RGBA", (width, height), start_color)
-    top = Image.new("RGBA", (width, height), end_color)
-    mask = Image.new("L", (width, height))
-    mask_data = []
-    for y in range(height):
-        mask_data.extend([int(255 * (y / (height - 1)))] * width)
-    mask.putdata(mask_data)
-    return Image.composite(top, base, mask)
 
 
 # Normalization helper functions
