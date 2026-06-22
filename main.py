@@ -310,6 +310,24 @@ class Weather(ActionBase):
             log.error(f"Error loading background {name}: {e}")
             return None
 
+    def get_font(self, font_path, size):
+        if not font_path or not os.path.exists(font_path):
+            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        cache_key = ("font", font_path, size)
+        if cache_key in self.icon_cache:
+            return self.icon_cache[cache_key]
+        try:
+            font = ImageFont.truetype(font_path, size)
+            self.icon_cache[cache_key] = font
+            return font
+        except Exception:
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", size)
+                self.icon_cache[cache_key] = font
+                return font
+            except Exception:
+                return ImageFont.load_default()
+
     def on_ready(self):
         self.show()
 
@@ -351,6 +369,10 @@ class Weather(ActionBase):
         self.lon_entry = Adw.EntryRow(title=self.plugin_base.lm.get("actions.long-entry.title"), input_purpose=Gtk.InputPurpose.NUMBER)
         self.loc_entry = Adw.EntryRow(title="Location Name")
 
+        self.font_path_entry = Adw.EntryRow(title="Font Path (.ttf)")
+        self.font_size_temp_entry = Adw.EntryRow(title="Temperature Font Size", input_purpose=Gtk.InputPurpose.NUMBER)
+        self.font_size_loc_entry = Adw.EntryRow(title="Location Font Size", input_purpose=Gtk.InputPurpose.NUMBER)
+
         self.units_cell_renderer = Gtk.CellRendererText()
         self.units_row.combo_box.pack_start(self.units_cell_renderer, True)
         self.units_row.combo_box.add_attribute(self.units_cell_renderer, "text", 0)
@@ -362,9 +384,12 @@ class Weather(ActionBase):
         self.lat_entry.connect("notify::text", self.on_lat_changed)
         self.lon_entry.connect("notify::text", self.on_lon_changed)
         self.loc_entry.connect("notify::text", self.on_loc_changed)
+        self.font_path_entry.connect("notify::text", self.on_font_path_changed)
+        self.font_size_temp_entry.connect("notify::text", self.on_font_size_temp_changed)
+        self.font_size_loc_entry.connect("notify::text", self.on_font_size_loc_changed)
         self.units_row.combo_box.connect("changed", self.on_units_changed)
 
-        return [self.loc_entry, self.lat_entry, self.lon_entry, self.units_row]
+        return [self.loc_entry, self.lat_entry, self.lon_entry, self.units_row, self.font_path_entry, self.font_size_temp_entry, self.font_size_loc_entry]
     
     def load_units_model(self):
         self.units_model.append([self.plugin_base.lm.get("actions.units.celsius"), 1])
@@ -398,11 +423,38 @@ class Weather(ActionBase):
         self.set_settings(settings)
         self.show(force=True)
 
+    def on_font_path_changed(self, entry, *args):
+        settings = self.get_settings()
+        settings["font_path"] = entry.get_text()
+        self.set_settings(settings)
+        self.show(force=True)
+
+    def on_font_size_temp_changed(self, entry, *args):
+        settings = self.get_settings()
+        try:
+            settings["font_size_temp"] = int(entry.get_text())
+        except ValueError:
+            settings["font_size_temp"] = 16
+        self.set_settings(settings)
+        self.show(force=True)
+
+    def on_font_size_loc_changed(self, entry, *args):
+        settings = self.get_settings()
+        try:
+            settings["font_size_loc"] = int(entry.get_text())
+        except ValueError:
+            settings["font_size_loc"] = 9
+        self.set_settings(settings)
+        self.show(force=True)
+
     def load_config_defaults(self):
         settings = self.get_settings()
         self.lat_entry.set_text(settings.get("lat", ""))  # Does not accept None
         self.lon_entry.set_text(settings.get("lon", ""))  # Does not accept None
         self.loc_entry.set_text(settings.get("location_name", "Washington DC"))
+        self.font_path_entry.set_text(settings.get("font_path", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
+        self.font_size_temp_entry.set_text(str(settings.get("font_size_temp", 16)))
+        self.font_size_loc_entry.set_text(str(settings.get("font_size_loc", 9)))
 
         if settings.get("unit") == 2:  # Imperial
             self.units_row.combo_box.set_active(1)
@@ -431,20 +483,9 @@ class Weather(ActionBase):
             image = self.render_button_image(weather)
             self.set_media(image=image, size=1.0, valign=0, halign=0)
             
-            current = weather.get("current", {})
-            temp = current.get("temperature", 0)
-            temp_unit = current.get("temperature_unit", "°C")
-            action_settings = self.get_settings()
-            location_name = action_settings.get("location_name", "Weather")
-            
-            temp_text = f"{int(temp)}{temp_unit}"
-            loc_display = location_name
-            if len(loc_display) > 16:
-                loc_display = loc_display[:14] + ".."
-            
             self.set_top_label("")
-            self.set_center_label(temp_text, font_size=16, color=[255, 255, 255, 255], outline_width=2, outline_color=[0, 0, 0, 255])
-            self.set_bottom_label(loc_display, font_size=9, color=[255, 255, 255, 255], outline_width=2, outline_color=[0, 0, 0, 255])
+            self.set_center_label("")
+            self.set_bottom_label("")
 
         # Launch timer
         self.show_timer = Timer(self.show_interval * 60, self.show)
@@ -775,6 +816,13 @@ class Weather(ActionBase):
         canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
         
+        settings = self.get_settings()
+        font_path = settings.get("font_path", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+        font_large = self.get_font(font_path, 28)
+        font_medium = self.get_font(font_path, 12)
+        font_title = self.get_font(font_path, 10)
+        font_text = self.get_font(font_path, 8)
+
         current = weather_data.get("current", {})
         is_day = current.get("is_day", True)
         weather_code = current.get("weather_code", 0)
@@ -824,12 +872,12 @@ class Weather(ActionBase):
             location_name = action_settings.get("location_name", "Weather")
             
             temp_text = f"{int(temp)}{temp_unit}"
-            draw.text((95, 15), temp_text, font=self.font_large, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
-            draw.text((95, 50), location_name, font=self.font_medium, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
+            draw.text((95, 15), temp_text, font=font_large, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
+            draw.text((95, 50), location_name, font=font_medium, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
             
         elif self.display_page == 1:
             # 5-Day Page
-            draw.text((100, 16), "5 Day Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+            draw.text((100, 16), "5 Day Forecast", font=font_title, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
             
             daily = weather_data.get("daily", {})
             days = daily.get("days", [])[:5]
@@ -842,7 +890,7 @@ class Weather(ActionBase):
                 cx = start_x + i * col_width
                 
                 day_label = f"{days[i]}." if days[i] else ""
-                draw.text((cx, 30), day_label, font=self.font_text, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+                draw.text((cx, 30), day_label, font=font_text, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
                 
                 code = codes[i] if i < len(codes) else 0
                 image_name = self.get_image_to_show(code, False)
@@ -852,11 +900,11 @@ class Weather(ActionBase):
                     
                 t_max = max_temps[i] if i < len(max_temps) else 0
                 temp_text = f"{int(t_max)}°"
-                draw.text((cx, 64), temp_text, font=self.font_medium, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+                draw.text((cx, 64), temp_text, font=font_medium, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
                 
         elif self.display_page == 2:
             # Hourly Page
-            draw.text((100, 16), "Hourly Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+            draw.text((100, 16), "Hourly Forecast", font=font_title, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
             
             hourly = weather_data.get("hourly", {})
             times = hourly.get("times", [])[:24]
@@ -881,14 +929,14 @@ class Weather(ActionBase):
                     
                 draw.line(points, fill=(255, 215, 0, 255), width=2)
                 
-                draw.text((graph_x_start - 6, graph_y_start), f"{int(min_t)}°", font=self.font_text, fill=(255, 255, 255, 255), anchor="rm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
-                draw.text((graph_x_end + 6, graph_y_end), f"{int(max_t)}°", font=self.font_text, fill=(255, 255, 255, 255), anchor="lm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+                draw.text((graph_x_start - 6, graph_y_start), f"{int(min_t)}°", font=font_text, fill=(255, 255, 255, 255), anchor="rm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+                draw.text((graph_x_end + 6, graph_y_end), f"{int(max_t)}°", font=font_text, fill=(255, 255, 255, 255), anchor="lm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
                 
                 x_labels = [0, 3, 6, 9, 11]
                 for idx in x_labels:
                     if idx < len(times):
                         px = int(graph_x_start + idx * dx)
-                        draw.text((px, 74), times[idx], font=self.font_text, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+                        draw.text((px, 74), times[idx], font=font_text, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
                         
         dot_y = 92
         dot_spacing = 10
@@ -939,6 +987,35 @@ class Weather(ActionBase):
         if icon_img:
             canvas.paste(icon_img, (34, 12), icon_img)
             
+        # Draw temperature and location text
+        temp = current.get("temperature", 0)
+        temp_unit = current.get("temperature_unit", "°C")
+        action_settings = self.get_settings()
+        location_name = action_settings.get("location_name", "Weather")
+        
+        font_path = action_settings.get("font_path", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+        try:
+            font_size_temp = int(action_settings.get("font_size_temp", 16))
+        except ValueError:
+            font_size_temp = 16
+        try:
+            font_size_loc = int(action_settings.get("font_size_loc", 9))
+        except ValueError:
+            font_size_loc = 9
+
+        font_temp = self.get_font(font_path, font_size_temp)
+        font_loc = self.get_font(font_path, font_size_loc)
+
+        draw = ImageDraw.Draw(canvas)
+
+        temp_text = f"{int(temp)}{temp_unit}"
+        draw.text((width / 2, 68), temp_text, font=font_temp, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+        
+        loc_display = location_name
+        if len(loc_display) > 16:
+            loc_display = loc_display[:14] + ".."
+        draw.text((width / 2, 88), loc_display, font=font_loc, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+        
         return canvas
 
     def get_image_to_show(self, weather_code: int, night: bool) -> str:
