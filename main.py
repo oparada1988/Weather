@@ -109,7 +109,6 @@ class WindDirection(ActionBase):
     def get_config_rows(self) -> list:
         self.units_model = Gtk.ListStore.new([str, int])
         self.units_row = ComboRow(title=self.plugin_base.lm.get("actions.unit.title"), model=self.units_model)
-        self.lat_entry = Adw.PreferencesRow.new()  # Fallback row style if Adw.EntryRow acts up, wait, Adw.EntryRow is perfect
         self.lat_entry = Adw.EntryRow(title=self.plugin_base.lm.get("actions.lat-entry.title"), input_purpose=Gtk.InputPurpose.NUMBER)
         self.lon_entry = Adw.EntryRow(title=self.plugin_base.lm.get("actions.long-entry.title"), input_purpose=Gtk.InputPurpose.NUMBER)
 
@@ -292,7 +291,8 @@ class Weather(ActionBase):
             "dawn": "Dawn.png",
             "day": "Day.png",
             "dusk": "dusk.png",
-            "night": "night.png"
+            "night": "night.png",
+            "forecast": "forecast_background.png"
         }
         filename = filename_map.get(name, "Day.png")
         bg_path = os.path.join(self.plugin_base.PATH, "assets", "sky-cycles", filename)
@@ -772,22 +772,26 @@ class Weather(ActionBase):
         now = datetime.datetime.now()
         hour = now.hour
         
-        if not is_day:
-            time_of_day = "night"
-        elif 5 <= hour <= 7:
-            time_of_day = "dawn"
-        elif 18 <= hour <= 20:
-            time_of_day = "dusk"
+        if self.display_page == 0:
+            if not is_day:
+                time_of_day = "night"
+            elif 5 <= hour <= 7:
+                time_of_day = "dawn"
+            elif 18 <= hour <= 20:
+                time_of_day = "dusk"
+            else:
+                time_of_day = "day"
+            bg_name = time_of_day
         else:
-            time_of_day = "day"
+            bg_name = "forecast"
             
-        bg = self.get_resized_background(time_of_day, (width, height))
+        bg = self.get_resized_background(bg_name, (width, height))
         if bg:
             canvas.paste(bg, (0, 0))
         else:
             draw.rectangle([0, 0, width, height], fill=(0, 0, 0, 255))
         
-        if time_of_day == "night":
+        if self.display_page == 0 and bg_name == "night":
             stars = [(20, 15), (60, 25), (140, 15), (180, 30), (90, 20)]
             for sx, sy in stars:
                 draw.ellipse([sx - 1, sy - 1, sx + 1, sy + 1], fill=(255, 255, 255, 180))
@@ -812,9 +816,7 @@ class Weather(ActionBase):
             
         elif self.display_page == 1:
             # 5-Day Page
-            # Draw semi-transparent card overlay
-            draw.rectangle([10, 10, 190, 85], fill=(0, 0, 0, 100), outline=(255, 255, 255, 60), width=1)
-            
+            # Removed dark rectangle overlay; drawing directly on user's forecast_background.png
             draw.text((100, 16), "5 Day Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm")
             
             daily = weather_data.get("daily", {})
@@ -827,7 +829,6 @@ class Weather(ActionBase):
             for i in range(len(days)):
                 cx = start_x + i * col_width
                 
-                # Format day text with trailing dot (matches user drawing: Mon., Tue.)
                 day_label = f"{days[i]}." if days[i] else ""
                 draw.text((cx, 30), day_label, font=self.font_text, fill=(255, 255, 255, 255), anchor="mm")
                 
@@ -843,9 +844,7 @@ class Weather(ActionBase):
                 
         elif self.display_page == 2:
             # Hourly Page
-            # Draw semi-transparent card overlay
-            draw.rectangle([10, 10, 190, 85], fill=(0, 0, 0, 100), outline=(255, 255, 255, 60), width=1)
-            
+            # Removed dark rectangle overlay; drawing directly on user's forecast_background.png
             draw.text((100, 16), "Hourly Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm")
             
             hourly = weather_data.get("hourly", {})
@@ -856,7 +855,6 @@ class Weather(ActionBase):
                 min_t, max_t = min(temps), max(temps)
                 t_range = (max_t - min_t) if max_t != min_t else 1.0
                 
-                # Set coordinates inside the 10-190 overlay box
                 graph_x_start = 32
                 graph_x_end = 168
                 graph_y_start = 65
@@ -872,11 +870,9 @@ class Weather(ActionBase):
                     
                 draw.line(points, fill=(255, 215, 0, 255), width=2)
                 
-                # Use solid high-brightness white text for readability
                 draw.text((graph_x_start - 6, graph_y_start), f"{int(min_t)}°", font=self.font_text, fill=(255, 255, 255, 255), anchor="rm")
                 draw.text((graph_x_end + 6, graph_y_end), f"{int(max_t)}°", font=self.font_text, fill=(255, 255, 255, 255), anchor="lm")
                 
-                # Show key hours (e.g. every 4 hours out of 24h)
                 x_labels = [0, 3, 6, 9, 11]
                 for idx in x_labels:
                     if idx < len(times):
