@@ -815,59 +815,59 @@ class Weather(ActionBase):
         settings = self.get_settings()
         settings["font_desc_temp"] = btn.get_font()
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=False)
 
     def on_temp_text_color_changed(self, btn, *args):
         settings = self.get_settings()
         rgba = btn.get_rgba()
         settings["text_color_temp"] = [int(rgba.red * 255), int(rgba.green * 255), int(rgba.blue * 255), int(rgba.alpha * 255)]
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=False)
 
     def on_temp_outline_width_changed(self, spin, *args):
         settings = self.get_settings()
         settings["outline_width_temp"] = int(spin.get_value())
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=False)
 
     def on_temp_outline_color_changed(self, btn, *args):
         settings = self.get_settings()
         rgba = btn.get_rgba()
         settings["outline_color_temp"] = [int(rgba.red * 255), int(rgba.green * 255), int(rgba.blue * 255), int(rgba.alpha * 255)]
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=False)
 
     def on_loc_font_changed(self, btn, *args):
         settings = self.get_settings()
         settings["font_desc_loc"] = btn.get_font()
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=False)
 
     def on_loc_text_color_changed(self, btn, *args):
         settings = self.get_settings()
         rgba = btn.get_rgba()
         settings["text_color_loc"] = [int(rgba.red * 255), int(rgba.green * 255), int(rgba.blue * 255), int(rgba.alpha * 255)]
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=False)
 
     def on_loc_outline_width_changed(self, spin, *args):
         settings = self.get_settings()
         settings["outline_width_loc"] = int(spin.get_value())
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=False)
 
     def on_loc_outline_color_changed(self, btn, *args):
         settings = self.get_settings()
         rgba = btn.get_rgba()
         settings["outline_color_loc"] = [int(rgba.red * 255), int(rgba.green * 255), int(rgba.blue * 255), int(rgba.alpha * 255)]
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=False)
 
     def on_icon_size_changed(self, spin, *args):
         settings = self.get_settings()
         settings["icon_size_pct"] = int(spin.get_value())
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=False)
 
     def on_icon_halign_changed(self, combo, *args):
         active = combo.get_active()
@@ -876,7 +876,7 @@ class Weather(ActionBase):
             settings = self.get_settings()
             settings["icon_halign"] = val
             self.set_settings(settings)
-            self.show(force=True)
+            self.show_async(force=False)
 
     def on_icon_valign_changed(self, combo, *args):
         active = combo.get_active()
@@ -885,7 +885,7 @@ class Weather(ActionBase):
             settings = self.get_settings()
             settings["icon_valign"] = val
             self.set_settings(settings)
-            self.show(force=True)
+            self.show_async(force=False)
 
     def on_temp_halign_changed(self, combo, *args):
         active = combo.get_active()
@@ -894,7 +894,7 @@ class Weather(ActionBase):
             settings = self.get_settings()
             settings["temp_halign"] = val
             self.set_settings(settings)
-            self.show(force=True)
+            self.show_async(force=False)
 
     def on_temp_valign_changed(self, combo, *args):
         active = combo.get_active()
@@ -903,7 +903,7 @@ class Weather(ActionBase):
             settings = self.get_settings()
             settings["temp_valign"] = val
             self.set_settings(settings)
-            self.show(force=True)
+            self.show_async(force=False)
 
     def on_loc_halign_changed(self, combo, *args):
         active = combo.get_active()
@@ -912,7 +912,7 @@ class Weather(ActionBase):
             settings = self.get_settings()
             settings["loc_halign"] = val
             self.set_settings(settings)
-            self.show(force=True)
+            self.show_async(force=False)
 
     def on_loc_valign_changed(self, combo, *args):
         active = combo.get_active()
@@ -921,7 +921,7 @@ class Weather(ActionBase):
             settings = self.get_settings()
             settings["loc_valign"] = val
             self.set_settings(settings)
-            self.show(force=True)
+            self.show_async(force=False)
 
     def load_config_defaults(self):
         settings = self.get_settings()
