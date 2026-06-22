@@ -261,11 +261,15 @@ class Weather(ActionBase):
             self.font_medium = ImageFont.truetype(font_path, 12)
             self.font_title = ImageFont.truetype(font_path, 10)
             self.font_text = ImageFont.truetype(font_path, 8)
+            self.font_button_temp = ImageFont.truetype(font_path, 16)
+            self.font_button_loc = ImageFont.truetype(font_path, 9)
         except Exception:
             self.font_large = ImageFont.load_default()
             self.font_medium = ImageFont.load_default()
             self.font_title = ImageFont.load_default()
             self.font_text = ImageFont.load_default()
+            self.font_button_temp = ImageFont.load_default()
+            self.font_button_loc = ImageFont.load_default()
 
     def get_resized_icon(self, name, size_tuple):
         cache_key = (name, size_tuple)
@@ -292,7 +296,11 @@ class Weather(ActionBase):
             "day": "Day.png",
             "dusk": "dusk.png",
             "night": "night.png",
-            "forecast": "forecast_background.png"
+            "forecast": "forecast_background.png",
+            "button_dawn": "button-dawn.png",
+            "button_day": "button-day.png",
+            "button_dusk": "button-dusk.png",
+            "button_night": "button-night.png"
         }
         filename = filename_map.get(name, "Day.png")
         bg_path = os.path.join(self.plugin_base.PATH, "assets", "sky-cycles", filename)
@@ -425,17 +433,9 @@ class Weather(ActionBase):
             self.set_media(image=image, size=1.0, valign=0, halign=0)
             self.set_bottom_label("")
         else:
-            current = weather.get("current", {})
-            weather_code = current.get("weather_code", 0)
-            is_day = current.get("is_day", True)
-            temperature = current.get("temperature", 0)
-            temperature_unit = current.get("temperature_unit", "°C")
-
-            image_to_show = self.get_image_to_show(weather_code=weather_code, night=not is_day)
-            media_path = self.plugin_base.get_icon_path(image_name=image_to_show)
-
-            self.set_media(media_path=media_path, size=0.8, valign=-1)
-            self.set_bottom_label(f"{int(temperature)} {temperature_unit}", font_size=12)
+            image = self.render_button_image(weather)
+            self.set_media(image=image, size=1.0, valign=0, halign=0)
+            self.set_bottom_label("")
 
         # Launch timer
         self.show_timer = Timer(self.show_interval * 60, self.show)
@@ -816,7 +816,6 @@ class Weather(ActionBase):
             
         elif self.display_page == 1:
             # 5-Day Page
-            # Removed dark rectangle overlay; drawing directly on user's forecast_background.png
             draw.text((100, 16), "5 Day Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm")
             
             daily = weather_data.get("daily", {})
@@ -844,7 +843,6 @@ class Weather(ActionBase):
                 
         elif self.display_page == 2:
             # Hourly Page
-            # Removed dark rectangle overlay; drawing directly on user's forecast_background.png
             draw.text((100, 16), "Hourly Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm")
             
             hourly = weather_data.get("hourly", {})
@@ -889,6 +887,58 @@ class Weather(ActionBase):
             else:
                 draw.ellipse([dx - 2, dot_y - 2, dx + 2, dot_y + 2], fill=(255, 255, 255, 100))
                 
+        return canvas
+
+    def render_button_image(self, weather_data) -> Image.Image:
+        width, height = 113, 113
+        canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        
+        current = weather_data.get("current", {})
+        is_day = current.get("is_day", True)
+        
+        now = datetime.datetime.now()
+        hour = now.hour
+        
+        if not is_day:
+            time_of_day = "night"
+        elif 5 <= hour <= 7:
+            time_of_day = "dawn"
+        elif 18 <= hour <= 20:
+            time_of_day = "dusk"
+        else:
+            time_of_day = "day"
+            
+        bg_name = "button_" + time_of_day
+        bg = self.get_resized_background(bg_name, (width, height))
+        if bg:
+            canvas.paste(bg, (0, 0))
+        else:
+            draw = ImageDraw.Draw(canvas)
+            draw.rectangle([0, 0, width, height], fill=(0, 0, 0, 255))
+            
+        draw = ImageDraw.Draw(canvas)
+        
+        # Paste weather icon in the center/upper part
+        weather_code = current.get("weather_code", 0)
+        image_name = self.get_image_to_show(weather_code, not is_day)
+        icon_img = self.get_resized_icon(image_name, (44, 44))
+        if icon_img:
+            canvas.paste(icon_img, (34, 12), icon_img)
+            
+        # Draw temperature and location text
+        temp = current.get("temperature", 0)
+        temp_unit = current.get("temperature_unit", "°C")
+        action_settings = self.get_settings()
+        location_name = action_settings.get("location_name", "Weather")
+        
+        temp_text = f"{int(temp)}{temp_unit}"
+        draw.text((width / 2, 68), temp_text, font=self.font_button_temp, fill=(255, 255, 255, 255), anchor="mm")
+        
+        loc_display = location_name
+        if len(loc_display) > 16:
+            loc_display = loc_display[:14] + ".."
+        draw.text((width / 2, 88), loc_display, font=self.font_button_loc, fill=(255, 255, 255, 200), anchor="mm")
+        
         return canvas
 
     def get_image_to_show(self, weather_code: int, night: bool) -> str:
