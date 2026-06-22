@@ -184,10 +184,14 @@ class WindDirection(ActionBase):
         try:
             resp = requests.get(url, params=params, timeout=5)
             if resp.status_code != 200:
+                if self.cached_wind is not None:
+                    return self.cached_wind
                 return None
             data = resp.json()
         except Exception as e:
             log.error(e)
+            if self.cached_wind is not None:
+                return self.cached_wind
             return None
 
         result = [
@@ -769,7 +773,7 @@ class Weather(ActionBase):
 
         # Temp Style Row Values
         self.temp_font_btn.set_font(settings.get("font_desc_temp", "DejaVu Sans Bold 16"))
-        self.temp_outline_width_spin.set_value(float(settings.get("outline_width_temp", 2)))
+        self.temp_outline_width_spin.set_value(float(settings.get("outline_width_temp", 1)))
         
         rgba_temp = Gdk.RGBA()
         color_temp = settings.get("outline_color_temp", [0, 0, 0, 255])
@@ -789,7 +793,7 @@ class Weather(ActionBase):
 
         # Loc Style Row Values
         self.loc_font_btn.set_font(settings.get("font_desc_loc", "DejaVu Sans Bold 9"))
-        self.loc_outline_width_spin.set_value(float(settings.get("outline_width_loc", 2)))
+        self.loc_outline_width_spin.set_value(float(settings.get("outline_width_loc", 1)))
         
         rgba_loc = Gdk.RGBA()
         color_loc = settings.get("outline_color_loc", [0, 0, 0, 255])
@@ -939,7 +943,14 @@ class Weather(ActionBase):
         if result:
             self.cached_weather = result
             self.last_fetch_time = now_time
-        return result
+            return result
+            
+        # Fallback to cache if request fails
+        if self.cached_weather is not None:
+            log.info("Weather fetch failed; falling back to cached weather data.")
+            return self.cached_weather
+            
+        return None
 
     def get_weather_open_meteo(self, lat, lon, imperial) -> dict:
         url = "https://api.open-meteo.com/v1/forecast"
@@ -1233,11 +1244,11 @@ class Weather(ActionBase):
         font_desc_loc = settings.get("font_desc_loc", "DejaVu Sans Bold 9")
 
         # Get Text and Outline Colors/Widths
-        outline_width_temp = int(settings.get("outline_width_temp", 2))
+        outline_width_temp = int(settings.get("outline_width_temp", 1))
         outline_color_temp = tuple(settings.get("outline_color_temp", [0, 0, 0, 255]))
         text_color_temp = tuple(settings.get("text_color_temp", [255, 255, 255, 255]))
 
-        outline_width_loc = int(settings.get("outline_width_loc", 2))
+        outline_width_loc = int(settings.get("outline_width_loc", 1))
         outline_color_loc = tuple(settings.get("outline_color_loc", [0, 0, 0, 255]))
         text_color_loc = tuple(settings.get("text_color_loc", [255, 255, 255, 255]))
 
@@ -1442,8 +1453,8 @@ class Weather(ActionBase):
         font_desc_temp = action_settings.get("font_desc_temp", "DejaVu Sans Bold 16")
         font_desc_loc = action_settings.get("font_desc_loc", "DejaVu Sans Bold 9")
         
-        outline_width_temp = int(action_settings.get("outline_width_temp", 2))
-        outline_width_loc = int(action_settings.get("outline_width_loc", 2))
+        outline_width_temp = int(action_settings.get("outline_width_temp", 1))
+        outline_width_loc = int(action_settings.get("outline_width_loc", 1))
         
         outline_color_temp = tuple(action_settings.get("outline_color_temp", [0, 0, 0, 255]))
         outline_color_loc = tuple(action_settings.get("outline_color_loc", [0, 0, 0, 255]))
