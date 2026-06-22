@@ -409,6 +409,33 @@ class Weather(ActionBase):
         self.lon_entry = Adw.EntryRow(title=self.plugin_base.lm.get("actions.long-entry.title"), input_purpose=Gtk.InputPurpose.NUMBER)
         self.loc_entry = Adw.EntryRow(title="Location Name")
 
+        # Weather Provider Row
+        self.provider_model = Gtk.ListStore.new([str, str])
+        self.provider_model.append(["Open-Meteo", "open-meteo"])
+        self.provider_model.append(["OpenWeatherMap", "openweathermap"])
+        self.provider_model.append(["Weather Underground", "wunderground"])
+        self.provider_model.append(["Weather.com", "weathercom"])
+        
+        self.provider_row = ComboRow(title="Weather Provider", model=self.provider_model)
+        self.provider_cell_renderer = Gtk.CellRendererText()
+        self.provider_row.combo_box.pack_start(self.provider_cell_renderer, True)
+        self.provider_row.combo_box.add_attribute(self.provider_cell_renderer, "text", 0)
+
+        # Provider-specific API Key Rows
+        self.owm_key_row = Adw.EntryRow(title="OpenWeatherMap API Key")
+        self.wu_key_row = Adw.EntryRow(title="Weather Underground API Key")
+        self.wc_key_row = Adw.EntryRow(title="Weather.com API Key")
+
+        # Refresh Interval Row
+        self.refresh_model = Gtk.ListStore.new([str, int])
+        self.refresh_model.append(["30 Minutes", 30])
+        self.refresh_model.append(["1 Hour", 60])
+        
+        self.refresh_row = ComboRow(title="Refresh Interval", model=self.refresh_model)
+        self.refresh_cell_renderer = Gtk.CellRendererText()
+        self.refresh_row.combo_box.pack_start(self.refresh_cell_renderer, True)
+        self.refresh_row.combo_box.add_attribute(self.refresh_cell_renderer, "text", 0)
+
         # Temperature Style Expander and rows
         self.temp_expander = Adw.ExpanderRow(title="Temperature")
         
@@ -481,8 +508,25 @@ class Weather(ActionBase):
         self.loc_outline_color_btn.connect("color-set", self.on_loc_outline_color_changed)
         
         self.units_row.combo_box.connect("changed", self.on_units_changed)
+        
+        self.provider_row.combo_box.connect("changed", self.on_provider_changed)
+        self.owm_key_row.connect("notify::text", self.on_owm_key_changed)
+        self.wu_key_row.connect("notify::text", self.on_wu_key_changed)
+        self.wc_key_row.connect("notify::text", self.on_wc_key_changed)
+        self.refresh_row.combo_box.connect("changed", self.on_refresh_changed)
 
-        return [self.lat_entry, self.lon_entry, self.units_row, self.temp_expander, self.loc_expander]
+        return [
+            self.lat_entry,
+            self.lon_entry,
+            self.units_row,
+            self.provider_row,
+            self.owm_key_row,
+            self.wu_key_row,
+            self.wc_key_row,
+            self.refresh_row,
+            self.temp_expander,
+            self.loc_expander
+        ]
 
     def load_units_model(self):
         self.units_model.append([self.plugin_base.lm.get("actions.units.celsius"), 1])
@@ -515,6 +559,55 @@ class Weather(ActionBase):
         settings["unit"] = unit
         self.set_settings(settings)
         self.show(force=True)
+
+    def on_provider_changed(self, combo, *args):
+        active = combo.get_active()
+        if active >= 0:
+            provider = self.provider_model[active][1]
+            settings = self.get_settings()
+            settings["provider"] = provider
+            self.set_settings(settings)
+            self.update_visibility()
+            self.show(force=True)
+
+    def on_owm_key_changed(self, entry, *args):
+        settings = self.get_settings()
+        settings["api_key_openweathermap"] = entry.get_text()
+        self.set_settings(settings)
+        self.show(force=True)
+
+    def on_wu_key_changed(self, entry, *args):
+        settings = self.get_settings()
+        settings["api_key_wunderground"] = entry.get_text()
+        self.set_settings(settings)
+        self.show(force=True)
+
+    def on_wc_key_changed(self, entry, *args):
+        settings = self.get_settings()
+        settings["api_key_weathercom"] = entry.get_text()
+        self.set_settings(settings)
+        self.show(force=True)
+
+    def on_refresh_changed(self, combo_box, *args):
+        active = combo_box.get_active()
+        if active >= 0:
+            interval = self.refresh_model[active][1]
+            settings = self.get_settings()
+            settings["refresh_interval"] = interval
+            self.set_settings(settings)
+            self.show_interval = interval
+            self.show(force=True)
+
+    def update_visibility(self):
+        active = self.provider_row.combo_box.get_active()
+        if active >= 0:
+            provider = self.provider_model[active][1]
+        else:
+            provider = "open-meteo"
+            
+        self.owm_key_row.set_visible(provider == "openweathermap")
+        self.wu_key_row.set_visible(provider == "wunderground")
+        self.wc_key_row.set_visible(provider == "weathercom")
 
     def on_temp_font_changed(self, btn, *args):
         settings = self.get_settings()
@@ -619,12 +712,52 @@ class Weather(ActionBase):
         else:  # Celsius and none
             self.units_row.combo_box.set_active(0)
 
+        # Load Provider-specific setting values
+        # Default global setting as fallback for provider
+        global_settings = self.plugin_base.get_settings()
+        if not global_settings:
+            global_settings = {}
+        provider = settings.get("provider", global_settings.get("provider", "open-meteo"))
+        
+        # Load API keys (defaulting to global api_key if not set specifically)
+        global_api_key = global_settings.get("api_key", "")
+        owm_key = settings.get("api_key_openweathermap", global_api_key if provider == "openweathermap" else "")
+        wu_key = settings.get("api_key_wunderground", global_api_key if provider == "wunderground" else "")
+        wc_key = settings.get("api_key_weathercom", global_api_key if provider == "weathercom" else "")
+        
+        self.owm_key_row.set_text(owm_key)
+        self.wu_key_row.set_text(wu_key)
+        self.wc_key_row.set_text(wc_key)
+        
+        active_idx = 0
+        for i, row in enumerate(self.provider_model):
+            if row[1] == provider:
+                active_idx = i
+                break
+        self.provider_row.combo_box.set_active(active_idx)
+        
+        self.update_visibility()
+
+        # Load Refresh Interval
+        interval = settings.get("refresh_interval", 30)
+        self.show_interval = interval
+        
+        active_refresh_idx = 0
+        for i, row in enumerate(self.refresh_model):
+            if row[1] == interval:
+                active_refresh_idx = i
+                break
+        self.refresh_row.combo_box.set_active(active_refresh_idx)
+
     def show(self, force=False):
         if not self.get_is_present():
             return
         # Stop timer if active
         if self.show_timer is not None:
             self.show_timer.cancel()
+
+        settings = self.get_settings()
+        self.show_interval = settings.get("refresh_interval", 30)
 
         weather = self.get_weather(force=force)
         if weather is None:
@@ -666,12 +799,13 @@ class Weather(ActionBase):
         except (TypeError, ValueError):
             return None
 
-        # Check global provider settings
+        # Check action-level provider settings with fallback to global settings
         global_settings = self.plugin_base.get_settings()
         if not global_settings:
             global_settings = {}
-        provider = global_settings.get("provider", "open-meteo")
-        api_key = global_settings.get("api_key", "")
+            
+        provider = settings.get("provider", global_settings.get("provider", "open-meteo"))
+        api_key = settings.get(f"api_key_{provider}", settings.get("api_key", global_settings.get("api_key", "")))
 
         result = None
         try:
@@ -1317,22 +1451,7 @@ class WeatherPlugin(PluginBase):
     def get_settings_area(self):
         group = Adw.PreferencesGroup(title="Global Weather Settings")
         
-        # 1. Weather Provider setting
-        provider_model = Gtk.ListStore.new([str, str])
-        provider_model.append(["Open-Meteo", "open-meteo"])
-        provider_model.append(["OpenWeatherMap", "openweathermap"])
-        provider_model.append(["Weather Underground", "wunderground"])
-        provider_model.append(["Weather.com", "weathercom"])
-        
-        provider_row = ComboRow(title="Weather Provider", model=provider_model)
-        cell = Gtk.CellRendererText()
-        provider_row.combo_box.pack_start(cell, True)
-        provider_row.combo_box.add_attribute(cell, "text", 0)
-        
-        # 2. API Key setting
-        key_row = Adw.EntryRow(title="API Key")
-        
-        # 3. Icon Pack setting
+        # Icon Pack setting
         icon_pack_model = Gtk.ListStore.new([str, str])
         icon_pack_model.append(["Plugin Default", "default"])
         
@@ -1350,20 +1469,7 @@ class WeatherPlugin(PluginBase):
         
         # Load current settings values
         settings = self.get_settings()
-        provider = settings.get("provider", "open-meteo")
-        api_key = settings.get("api_key", "")
         selected_icon_pack = settings.get("icon_pack", "default")
-        
-        # Set active provider
-        active_idx = 0
-        for i, row in enumerate(provider_model):
-            if row[1] == provider:
-                active_idx = i
-                break
-        provider_row.combo_box.set_active(active_idx)
-        
-        # Set API Key
-        key_row.set_text(api_key)
         
         # Set active icon pack
         active_pack_idx = 0
@@ -1374,19 +1480,6 @@ class WeatherPlugin(PluginBase):
         icon_pack_row.combo_box.set_active(active_pack_idx)
         
         # Define signal handlers to save changes
-        def on_provider_changed(combo, *args):
-            active = combo.get_active()
-            if active >= 0:
-                prov = provider_model[active][1]
-                s = self.get_settings()
-                s["provider"] = prov
-                self.set_settings(s)
-                
-        def on_api_key_changed(entry, *args):
-            s = self.get_settings()
-            s["api_key"] = entry.get_text()
-            self.set_settings(s)
-            
         def on_icon_pack_changed(combo, *args):
             active = combo.get_active()
             if active >= 0:
@@ -1395,12 +1488,8 @@ class WeatherPlugin(PluginBase):
                 s["icon_pack"] = pack_name
                 self.set_settings(s)
                 
-        provider_row.combo_box.connect("changed", on_provider_changed)
-        key_row.connect("notify::text", on_api_key_changed)
         icon_pack_row.combo_box.connect("changed", on_icon_pack_changed)
         
-        group.add(provider_row)
-        group.add(key_row)
         group.add(icon_pack_row)
         
         return group
