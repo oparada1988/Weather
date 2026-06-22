@@ -516,10 +516,10 @@ class Weather(ActionBase):
         self.refresh_row.combo_box.connect("changed", self.on_refresh_changed)
 
         return [
-            self.lat_entry,
-            self.lon_entry,
             self.units_row,
             self.provider_row,
+            self.lat_entry,
+            self.lon_entry,
             self.owm_key_row,
             self.wu_key_row,
             self.wc_key_row,
