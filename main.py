@@ -608,6 +608,8 @@ class Weather(ActionBase):
         self.owm_key_row.set_visible(provider == "openweathermap")
         self.wu_key_row.set_visible(provider == "wunderground")
         self.wc_key_row.set_visible(provider == "weathercom")
+        self.lat_entry.set_visible(provider == "open-meteo")
+        self.lon_entry.set_visible(provider == "open-meteo")
 
     def on_temp_font_changed(self, btn, *args):
         settings = self.get_settings()
