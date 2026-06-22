@@ -97,6 +97,7 @@ class WindDirection(ActionBase):
         self.show_timer: Timer = None
         self.cached_wind = None
         self.last_fetch_time = None
+        self.debounce_timer = None
         
     def on_ready(self):
         self.show_async()
@@ -128,17 +129,23 @@ class WindDirection(ActionBase):
         self.units_model.append([self.plugin_base.lm.get("actions.units.metric"), 1])
         self.units_model.append([self.plugin_base.lm.get("actions.units.imperial"), 2])
     
+    def trigger_debounced_show(self):
+        if hasattr(self, "debounce_timer") and self.debounce_timer is not None:
+            self.debounce_timer.cancel()
+        self.debounce_timer = Timer(1.0, self.show_async, args=(True,))
+        self.debounce_timer.start()
+
     def on_lat_changed(self, entry, text):
         settings = self.get_settings()
         settings["lat"] = entry.get_text()
         self.set_settings(settings)
-        self.show_async(force=True)
+        self.trigger_debounced_show()
     
     def on_lon_changed(self, entry, *args):
         settings = self.get_settings()
         settings["lon"] = entry.get_text()
         self.set_settings(settings)
-        self.show_async(force=True)
+        self.trigger_debounced_show()
 
     def on_units_changed(self, combo_box, *args):
         unit = self.units_model[combo_box.get_active()][1]
@@ -257,6 +264,7 @@ class Weather(ActionBase):
         self.cycle_timer: Timer = None
         self.cycle_step_timer: Timer = None
         self.transition_timer_id = None
+        self.debounce_timer = None
         self.init_fonts()
         
     def init_fonts(self):
@@ -576,23 +584,29 @@ class Weather(ActionBase):
     def get_custom_config_area(self):
         return Gtk.Label(label=self.plugin_base.lm.get("actions.open-meteo-thanks"))
     
+    def trigger_debounced_show(self):
+        if hasattr(self, "debounce_timer") and self.debounce_timer is not None:
+            self.debounce_timer.cancel()
+        self.debounce_timer = Timer(1.0, self.show_async, args=(True,))
+        self.debounce_timer.start()
+
     def on_lat_changed(self, entry, *args):
         settings = self.get_settings()
         settings["lat"] = entry.get_text()
         self.set_settings(settings)
-        self.show_async(force=True)
+        self.trigger_debounced_show()
     
     def on_lon_changed(self, entry, *args):
         settings = self.get_settings()
         settings["lon"] = entry.get_text()
         self.set_settings(settings)
-        self.show_async(force=True)
+        self.trigger_debounced_show()
 
     def on_loc_changed(self, entry, *args):
         settings = self.get_settings()
         settings["location_name"] = entry.get_text()
         self.set_settings(settings)
-        self.show_async(force=True)
+        self.trigger_debounced_show()
 
     def on_units_changed(self, combo_box, *args):
         unit = self.units_model[combo_box.get_active()][1]
@@ -911,6 +925,50 @@ class Weather(ActionBase):
         self.show_timer = Timer(self.show_interval * 60, self.show)
         self.show_timer.start()
 
+    def geocode_location(self, location_name) -> list[float] | None:
+        if not location_name:
+            return None
+            
+        # Try Open-Meteo free geocoding API
+        url = "https://geocoding-api.open-meteo.com/v1/search"
+        params = {
+            "name": location_name,
+            "count": 1
+        }
+        try:
+            resp = requests.get(url, params=params, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                if "results" in data and len(data["results"]) > 0:
+                    res = data["results"][0]
+                    return [float(res["latitude"]), float(res["longitude"])]
+        except Exception as e:
+            log.error(f"Open-Meteo geocoding failed: {e}")
+
+        # Fallback to OWM geocoding if API key is present and provider is OWM
+        settings = self.get_settings()
+        global_settings = self.plugin_base.get_settings() or {}
+        provider = settings.get("provider", global_settings.get("provider", "open-meteo"))
+        api_key = settings.get(f"api_key_{provider}", settings.get("api_key", global_settings.get("api_key", "")))
+        
+        if provider == "openweathermap" and api_key:
+            url_owm = "http://api.openweathermap.org/geo/1.0/direct"
+            params_owm = {
+                "q": location_name,
+                "limit": 1,
+                "appid": api_key
+            }
+            try:
+                resp = requests.get(url_owm, params=params_owm, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data and len(data) > 0:
+                        return [float(data[0]["lat"]), float(data[0]["lon"])]
+            except Exception as e:
+                log.error(f"OWM fallback geocoding failed: {e}")
+                
+        return None
+
     def get_weather(self, force=False) -> dict:
         now_time = time.time()
         if not force and self.cached_weather is not None and self.last_fetch_time is not None:
@@ -920,13 +978,33 @@ class Weather(ActionBase):
         settings = self.get_settings()
         lat = settings.get("lat")
         lon = settings.get("lon")
+        location_name = settings.get("location_name", "Washington DC")
         imperial = settings.get("unit") == 2
 
         try:
             lat = float(lat)
             lon = float(lon)
+            has_coords = True
         except (TypeError, ValueError):
-            return None
+            has_coords = False
+            lat = None
+            lon = None
+
+        if not has_coords and location_name:
+            cached_loc = settings.get("resolved_loc_name")
+            if cached_loc == location_name and settings.get("resolved_lat") is not None and settings.get("resolved_lon") is not None:
+                lat = float(settings.get("resolved_lat"))
+                lon = float(settings.get("resolved_lon"))
+                has_coords = True
+            else:
+                coords = self.geocode_location(location_name)
+                if coords:
+                    lat, lon = coords
+                    has_coords = True
+                    settings["resolved_loc_name"] = location_name
+                    settings["resolved_lat"] = lat
+                    settings["resolved_lon"] = lon
+                    self.set_settings(settings)
 
         # Check action-level provider settings with fallback to global settings
         global_settings = self.plugin_base.get_settings()
@@ -935,6 +1013,9 @@ class Weather(ActionBase):
             
         provider = settings.get("provider", global_settings.get("provider", "open-meteo"))
         api_key = settings.get(f"api_key_{provider}", settings.get("api_key", global_settings.get("api_key", "")))
+
+        if not has_coords:
+            return None
 
         result = None
         try:
@@ -1058,11 +1139,15 @@ class Weather(ActionBase):
             resp = requests.get(url, params=params, timeout=5)
             if resp.status_code != 200:
                 log.error(f"OWM failed with status {resp.status_code}")
-                return self.get_weather_open_meteo(lat, lon, imperial)
+                if lat is not None and lon is not None:
+                    return self.get_weather_open_meteo(lat, lon, imperial)
+                return None
             data = resp.json()
         except Exception as e:
             log.error(f"OWM request failed: {e}")
-            return self.get_weather_open_meteo(lat, lon, imperial)
+            if lat is not None and lon is not None:
+                return self.get_weather_open_meteo(lat, lon, imperial)
+            return None
             
         forecast_list = data.get("list", [])
         if not forecast_list:
