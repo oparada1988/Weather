@@ -95,6 +95,18 @@ def twc_to_wmo(code):
     return mapping.get(code, 0)
 
 
+def is_rain_or_snow(code):
+    if code is None:
+        return False
+    return (
+        51 <= code <= 57 or
+        61 <= code <= 67 or
+        71 <= code <= 77 or
+        80 <= code <= 86 or
+        95 <= code <= 99
+    )
+
+
 class WindDirection(ActionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -299,7 +311,9 @@ class Weather(ActionBase):
             "button_dawn": "button-dawn.png",
             "button_day": "button-day.png",
             "button_dusk": "button-dusk.png",
-            "button_night": "button-night.png"
+            "button_night": "button-night.png",
+            "rain": "rain-background.png",
+            "button_rain": "rain-background-button.png"
         }
         filename = filename_map.get(name, "Day.png")
         bg_path = os.path.join(self.plugin_base.PATH, "assets", "sky-cycles", filename)
@@ -766,20 +780,24 @@ class Weather(ActionBase):
         
         current = weather_data.get("current", {})
         is_day = current.get("is_day", True)
+        weather_code = current.get("weather_code", 0)
         
         now = datetime.datetime.now()
         hour = now.hour
         
         if self.display_page == 0:
-            if not is_day:
-                time_of_day = "night"
-            elif 5 <= hour <= 7:
-                time_of_day = "dawn"
-            elif 18 <= hour <= 20:
-                time_of_day = "dusk"
+            if is_rain_or_snow(weather_code):
+                bg_name = "rain"
             else:
-                time_of_day = "day"
-            bg_name = time_of_day
+                if not is_day:
+                    time_of_day = "night"
+                elif 5 <= hour <= 7:
+                    time_of_day = "dawn"
+                elif 18 <= hour <= 20:
+                    time_of_day = "dusk"
+                else:
+                    time_of_day = "day"
+                bg_name = time_of_day
         else:
             bg_name = "forecast"
             
@@ -893,20 +911,23 @@ class Weather(ActionBase):
         
         current = weather_data.get("current", {})
         is_day = current.get("is_day", True)
+        weather_code = current.get("weather_code", 0)
         
         now = datetime.datetime.now()
         hour = now.hour
         
-        if not is_day:
-            time_of_day = "night"
-        elif 5 <= hour <= 7:
-            time_of_day = "dawn"
-        elif 18 <= hour <= 20:
-            time_of_day = "dusk"
+        if is_rain_or_snow(weather_code):
+            bg_name = "button_rain"
         else:
-            time_of_day = "day"
-            
-        bg_name = "button_" + time_of_day
+            if not is_day:
+                time_of_day = "night"
+            elif 5 <= hour <= 7:
+                time_of_day = "dawn"
+            elif 18 <= hour <= 20:
+                time_of_day = "dusk"
+            else:
+                time_of_day = "day"
+            bg_name = "button_" + time_of_day
         bg = self.get_resized_background(bg_name, (width, height))
         if bg:
             canvas.paste(bg, (0, 0))
