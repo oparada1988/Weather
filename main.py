@@ -827,12 +827,12 @@ class Weather(ActionBase):
             location_name = action_settings.get("location_name", "Weather")
             
             temp_text = f"{int(temp)}{temp_unit}"
-            draw.text((95, 15), temp_text, font=self.font_large, fill=(255, 255, 255, 255))
-            draw.text((95, 50), location_name, font=self.font_medium, fill=(255, 255, 255, 200))
+            draw.text((95, 15), temp_text, font=self.font_large, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
+            draw.text((95, 50), location_name, font=self.font_medium, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
             
         elif self.display_page == 1:
             # 5-Day Page
-            draw.text((100, 16), "5 Day Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm")
+            draw.text((100, 16), "5 Day Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
             
             daily = weather_data.get("daily", {})
             days = daily.get("days", [])[:5]
@@ -845,7 +845,7 @@ class Weather(ActionBase):
                 cx = start_x + i * col_width
                 
                 day_label = f"{days[i]}." if days[i] else ""
-                draw.text((cx, 30), day_label, font=self.font_text, fill=(255, 255, 255, 255), anchor="mm")
+                draw.text((cx, 30), day_label, font=self.font_text, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
                 
                 code = codes[i] if i < len(codes) else 0
                 image_name = self.get_image_to_show(code, False)
@@ -855,11 +855,11 @@ class Weather(ActionBase):
                     
                 t_max = max_temps[i] if i < len(max_temps) else 0
                 temp_text = f"{int(t_max)}°"
-                draw.text((cx, 64), temp_text, font=self.font_medium, fill=(255, 255, 255, 255), anchor="mm")
+                draw.text((cx, 64), temp_text, font=self.font_medium, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
                 
         elif self.display_page == 2:
             # Hourly Page
-            draw.text((100, 16), "Hourly Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm")
+            draw.text((100, 16), "Hourly Forecast", font=self.font_title, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
             
             hourly = weather_data.get("hourly", {})
             times = hourly.get("times", [])[:24]
@@ -884,14 +884,14 @@ class Weather(ActionBase):
                     
                 draw.line(points, fill=(255, 215, 0, 255), width=2)
                 
-                draw.text((graph_x_start - 6, graph_y_start), f"{int(min_t)}°", font=self.font_text, fill=(255, 255, 255, 255), anchor="rm")
-                draw.text((graph_x_end + 6, graph_y_end), f"{int(max_t)}°", font=self.font_text, fill=(255, 255, 255, 255), anchor="lm")
+                draw.text((graph_x_start - 6, graph_y_start), f"{int(min_t)}°", font=self.font_text, fill=(255, 255, 255, 255), anchor="rm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+                draw.text((graph_x_end + 6, graph_y_end), f"{int(max_t)}°", font=self.font_text, fill=(255, 255, 255, 255), anchor="lm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
                 
                 x_labels = [0, 3, 6, 9, 11]
                 for idx in x_labels:
                     if idx < len(times):
                         px = int(graph_x_start + idx * dx)
-                        draw.text((px, 74), times[idx], font=self.font_text, fill=(255, 255, 255, 255), anchor="mm")
+                        draw.text((px, 74), times[idx], font=self.font_text, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
                         
         dot_y = 92
         dot_spacing = 10
@@ -951,12 +951,12 @@ class Weather(ActionBase):
         location_name = action_settings.get("location_name", "Weather")
         
         temp_text = f"{int(temp)}{temp_unit}"
-        draw.text((width / 2, 68), temp_text, font=self.font_button_temp, fill=(255, 255, 255, 255), anchor="mm")
+        draw.text((width / 2, 68), temp_text, font=self.font_button_temp, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
         
         loc_display = location_name
         if len(loc_display) > 16:
             loc_display = loc_display[:14] + ".."
-        draw.text((width / 2, 88), loc_display, font=self.font_button_loc, fill=(255, 255, 255, 200), anchor="mm")
+        draw.text((width / 2, 88), loc_display, font=self.font_button_loc, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
         
         return canvas
 
