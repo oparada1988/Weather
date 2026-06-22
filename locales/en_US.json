@@ -1,5 +1,6 @@
 {
     "plugin.name": "Weather",
+    "actions.unit.title": "Weather Unit",
     "actions.lat-entry.title": "Latitude",
     "actions.long-entry.title": "Longitude",
     "actions.open-meteo-thanks": "Thanks to open-meteo for providing such a great API",
