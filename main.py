@@ -17,7 +17,7 @@ import time
 from PIL import Image, ImageDraw, ImageFont
 from loguru import logger as log
 import requests
-from threading import Timer
+from threading import Timer, Thread
 import datetime
 
 # Add plugin to sys.paths
@@ -99,7 +99,10 @@ class WindDirection(ActionBase):
         self.last_fetch_time = None
         
     def on_ready(self):
-        self.show()
+        self.show_async()
+
+    def show_async(self, force=False):
+        Thread(target=self.show, args=(force,), daemon=True).start()
 
     def get_config_rows(self) -> list:
         self.units_model = Gtk.ListStore.new([str, int])
@@ -129,20 +132,20 @@ class WindDirection(ActionBase):
         settings = self.get_settings()
         settings["lat"] = entry.get_text()
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=True)
     
     def on_lon_changed(self, entry, *args):
         settings = self.get_settings()
         settings["lon"] = entry.get_text()
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=True)
 
     def on_units_changed(self, combo_box, *args):
         unit = self.units_model[combo_box.get_active()][1]
         settings = self.get_settings()
         settings["unit"] = unit
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=True)
 
     def load_config_defaults(self):
         settings = self.get_settings()
@@ -234,7 +237,7 @@ class WindDirection(ActionBase):
         self.show_timer.start()
 
     def on_key_down(self):
-        self.show(force=True)
+        self.show_async(force=True)
     
     def get_custom_config_area(self):
         return Gtk.Label(label=self.plugin_base.lm.get("actions.open-meteo-thanks"))
@@ -377,12 +380,15 @@ class Weather(ActionBase):
         return self.get_font("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(override_size if override_size is not None else default_size))
 
     def on_ready(self):
-        self.show()
+        self.show_async()
         if isinstance(self.input_ident, Input.Dial):
             self.start_cycle_timer()
 
     def on_key_down(self):
-        self.show(force=True)
+        self.show_async(force=True)
+
+    def show_async(self, force=False):
+        Thread(target=self.show, args=(force,), daemon=True).start()
 
     def event_callback(self, event: InputEvent, data: dict = None):
         # Cancel any active automatic cycle steps on manual interaction
@@ -574,26 +580,26 @@ class Weather(ActionBase):
         settings = self.get_settings()
         settings["lat"] = entry.get_text()
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=True)
     
     def on_lon_changed(self, entry, *args):
         settings = self.get_settings()
         settings["lon"] = entry.get_text()
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=True)
 
     def on_loc_changed(self, entry, *args):
         settings = self.get_settings()
         settings["location_name"] = entry.get_text()
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=True)
 
     def on_units_changed(self, combo_box, *args):
         unit = self.units_model[combo_box.get_active()][1]
         settings = self.get_settings()
         settings["unit"] = unit
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=True)
 
     def on_provider_changed(self, combo, *args):
         active = combo.get_active()
@@ -603,25 +609,25 @@ class Weather(ActionBase):
             settings["provider"] = provider
             self.set_settings(settings)
             self.update_visibility()
-            self.show(force=True)
+            self.show_async(force=True)
 
     def on_owm_key_changed(self, entry, *args):
         settings = self.get_settings()
         settings["api_key_openweathermap"] = entry.get_text()
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=True)
 
     def on_wu_key_changed(self, entry, *args):
         settings = self.get_settings()
         settings["api_key_wunderground"] = entry.get_text()
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=True)
 
     def on_wc_key_changed(self, entry, *args):
         settings = self.get_settings()
         settings["api_key_weathercom"] = entry.get_text()
         self.set_settings(settings)
-        self.show(force=True)
+        self.show_async(force=True)
 
     def on_refresh_changed(self, combo_box, *args):
         active = combo_box.get_active()
@@ -631,7 +637,7 @@ class Weather(ActionBase):
             settings["refresh_interval"] = interval
             self.set_settings(settings)
             self.show_interval = interval
-            self.show(force=True)
+            self.show_async(force=True)
 
     def on_cycle_changed(self, combo_box, *args):
         active = combo_box.get_active()
