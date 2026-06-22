@@ -330,8 +330,12 @@ class Weather(ActionBase):
 
     def resolve_font_from_desc(self, font_desc_str, default_size, override_size=None):
         try:
+            if not font_desc_str:
+                font_desc_str = "DejaVu Sans Bold 16"
             desc = Pango.FontDescription.from_string(font_desc_str)
             family = desc.get_family()
+            if not family:
+                family = "DejaVu Sans"
             weight = desc.get_weight()
             style = desc.get_style()
             
@@ -664,19 +668,26 @@ class Weather(ActionBase):
 
         # Check global provider settings
         global_settings = self.plugin_base.get_settings()
+        if not global_settings:
+            global_settings = {}
         provider = global_settings.get("provider", "open-meteo")
         api_key = global_settings.get("api_key", "")
 
-        if provider == "open-meteo" or not api_key:
-            result = self.get_weather_open_meteo(lat, lon, imperial)
-        elif provider == "openweathermap":
-            result = self.get_weather_openweathermap(lat, lon, api_key, imperial)
-        elif provider == "wunderground":
-            result = self.get_weather_wunderground(lat, lon, api_key, imperial)
-        elif provider == "weathercom":
-            result = self.get_weather_weathercom(lat, lon, api_key, imperial)
-        else:
-            result = self.get_weather_open_meteo(lat, lon, imperial)
+        result = None
+        try:
+            if provider == "open-meteo" or not api_key:
+                result = self.get_weather_open_meteo(lat, lon, imperial)
+            elif provider == "openweathermap":
+                result = self.get_weather_openweathermap(lat, lon, api_key, imperial)
+            elif provider == "wunderground":
+                result = self.get_weather_wunderground(lat, lon, api_key, imperial)
+            elif provider == "weathercom":
+                result = self.get_weather_weathercom(lat, lon, api_key, imperial)
+            else:
+                result = self.get_weather_open_meteo(lat, lon, imperial)
+        except Exception as e:
+            log.error(f"Error fetching or parsing weather from provider '{provider}': {e}")
+            result = None
 
         if result:
             self.cached_weather = result
