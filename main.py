@@ -9,7 +9,7 @@ from src.backend.PluginManager.ActionInputSupport import ActionInputSupport
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, Gdk, Pango
+from gi.repository import Gtk, Adw, Gdk, Pango, GLib
 
 import sys
 import os
@@ -246,12 +246,14 @@ class Weather(ActionBase):
         self.show_interval = 30  # minutes
         self.show_timer: Timer = None
         self.display_page = 0
+        self.previous_page = 0
         self.page_timer: Timer = None
         self.cached_weather = None
         self.last_fetch_time = None
         self.icon_cache = {}
         self.cycle_timer: Timer = None
         self.cycle_step_timer: Timer = None
+        self.transition_timer_id = None
         self.init_fonts()
         
     def init_fonts(self):
@@ -884,8 +886,12 @@ class Weather(ActionBase):
         is_dial = isinstance(self.input_ident, Input.Dial)
         
         if is_dial:
-            image = self.render_dial_image(weather)
-            self.set_media(image=image, size=1.0, valign=0, halign=0)
+            if hasattr(self, "previous_page") and self.previous_page != self.display_page:
+                self.animate_slide_transition(self.previous_page, self.display_page, weather)
+            else:
+                image = self.render_dial_image(weather)
+                self.set_media(image=image, size=1.0, valign=0, halign=0)
+            self.previous_page = self.display_page
             self.set_bottom_label("")
         else:
             image = self.render_button_image(weather)
@@ -1234,7 +1240,9 @@ class Weather(ActionBase):
             "hourly": hourly_data
         }
 
-    def render_dial_image(self, weather_data) -> Image.Image:
+    def render_dial_image(self, weather_data, page=None) -> Image.Image:
+        if page is None:
+            page = self.display_page
         width, height = 200, 100
         canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
@@ -1287,7 +1295,7 @@ class Weather(ActionBase):
         now = datetime.datetime.now()
         hour = now.hour
         
-        if self.display_page == 0:
+        if page == 0:
             if is_rain_or_snow(weather_code):
                 bg_name = "rain"
             else:
@@ -1309,12 +1317,12 @@ class Weather(ActionBase):
         else:
             draw.rectangle([0, 0, width, height], fill=(0, 0, 0, 255))
         
-        if self.display_page == 0 and bg_name == "night":
+        if page == 0 and bg_name == "night":
             stars = [(20, 15), (60, 25), (140, 15), (180, 30), (90, 20)]
             for sx, sy in stars:
                 draw.ellipse([sx - 1, sy - 1, sx + 1, sy + 1], fill=(255, 255, 255, 180))
                 
-        if self.display_page == 0:
+        if page == 0:
             # Current Page
             weather_code = current.get("weather_code", 0)
             image_name = self.get_image_to_show(weather_code, not is_day)
@@ -1332,7 +1340,7 @@ class Weather(ActionBase):
             draw.text((95, 15), temp_text, font=font_large, fill=text_color_temp, stroke_width=outline_width_temp, stroke_fill=outline_color_temp)
             draw.text((95, 50), location_name, font=font_medium, fill=text_color_loc, stroke_width=outline_width_loc, stroke_fill=outline_color_loc)
             
-        elif self.display_page == 1:
+        elif page == 1:
             # 5-Day Page
             draw.text((100, 14), "5 Day Forecast", font=font_title, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 10 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
             
@@ -1359,7 +1367,7 @@ class Weather(ActionBase):
                 temp_text = f"{int(t_max)}°"
                 draw.text((cx, 72), temp_text, font=font_medium_temp, fill=text_color_temp, anchor="mm", stroke_width=max(1, round(outline_width_temp * 12 / 28)) if outline_width_temp > 0 else 0, stroke_fill=outline_color_temp)
                 
-        elif self.display_page == 2:
+        elif page == 2:
             # Hourly Page
             draw.text((100, 14), "Hourly Forecast", font=font_title, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 10 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
             
@@ -1400,12 +1408,65 @@ class Weather(ActionBase):
         dot_x_start = width / 2 - dot_spacing
         for d in range(3):
             dx = dot_x_start + d * dot_spacing
-            if d == self.display_page:
+            if d == page:
                 draw.ellipse([dx - 3, dot_y - 3, dx + 3, dot_y + 3], fill=(255, 255, 255, 255))
             else:
                 draw.ellipse([dx - 2, dot_y - 2, dx + 2, dot_y + 2], fill=(255, 255, 255, 100))
                 
         return canvas
+
+    def animate_slide_transition(self, prev_page, current_page, weather_data):
+        # Cancel any ongoing GLib slide transition timer
+        if hasattr(self, "transition_timer_id") and self.transition_timer_id is not None:
+            GLib.source_remove(self.transition_timer_id)
+            self.transition_timer_id = None
+
+        width, height = 200, 100
+        
+        # Pre-render the two pages
+        img_prev = self.render_dial_image(weather_data, page=prev_page)
+        img_curr = self.render_dial_image(weather_data, page=current_page)
+        
+        # Determine direction
+        direction = "forward"
+        if (prev_page - 1) % 3 == current_page:
+            direction = "backward"
+            
+        num_frames = 6
+        current_frame = 0
+        
+        def update_frame():
+            nonlocal current_frame
+            if not self.get_is_present():
+                self.transition_timer_id = None
+                return False  # Stop the timer
+                
+            current_frame += 1
+            if current_frame > num_frames:
+                # Set final frame to ensure crisp rendering of current page
+                self.set_media(image=img_curr, size=1.0, valign=0, halign=0)
+                self.transition_timer_id = None
+                return False  # Stop GLib timeout
+                
+            # Interpolate offset
+            t = current_frame / num_frames
+            offset = int(t * width)
+            
+            canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            if direction == "forward":
+                # Scroll left: prev page slides left (-offset), current page slides left from right (width - offset)
+                canvas.paste(img_prev, (-offset, 0))
+                canvas.paste(img_curr, (width - offset, 0))
+            else:
+                # Scroll right: prev page slides right (offset), current page slides right from left (-width + offset)
+                canvas.paste(img_prev, (offset, 0))
+                canvas.paste(img_curr, (-width + offset, 0))
+                
+            self.set_media(image=canvas, size=1.0, valign=0, halign=0)
+            return True  # Keep GLib timeout running
+
+        # Start timeout updating every 25ms
+        self.transition_timer_id = GLib.timeout_add(25, update_frame)
 
     def render_button_image(self, weather_data) -> Image.Image:
         width, height = 113, 113
