@@ -328,16 +328,19 @@ class Weather(ActionBase):
             except Exception:
                 return ImageFont.load_default()
 
-    def resolve_font_from_desc(self, font_desc_str, default_size):
+    def resolve_font_from_desc(self, font_desc_str, default_size, override_size=None):
         try:
             desc = Pango.FontDescription.from_string(font_desc_str)
             family = desc.get_family()
             weight = desc.get_weight()
             style = desc.get_style()
-            size = desc.get_size() / Pango.SCALE
             
-            if size <= 0:
-                size = default_size
+            if override_size is not None:
+                size = override_size
+            else:
+                size = desc.get_size() / Pango.SCALE
+                if size <= 0:
+                    size = default_size
                 
             query = family
             style_list = []
@@ -359,7 +362,7 @@ class Weather(ActionBase):
         except Exception as e:
             log.error(f"Error parsing font description '{font_desc_str}': {e}")
             
-        return self.get_font("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(default_size))
+        return self.get_font("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(override_size if override_size is not None else default_size))
 
     def on_ready(self):
         self.show()
@@ -403,12 +406,17 @@ class Weather(ActionBase):
         self.loc_entry = Adw.EntryRow(title="Location Name")
 
         # Temperature Style Expander and rows
-        self.temp_expander = Adw.ExpanderRow(title="Temperature Style")
+        self.temp_expander = Adw.ExpanderRow(title="Temperature")
         
         self.temp_font_row = Adw.ActionRow(title="Font")
         self.temp_font_btn = Gtk.FontButton()
         self.temp_font_row.add_suffix(self.temp_font_btn)
         self.temp_expander.add_row(self.temp_font_row)
+        
+        self.temp_text_color_row = Adw.ActionRow(title="Color")
+        self.temp_text_color_btn = Gtk.ColorButton()
+        self.temp_text_color_row.add_suffix(self.temp_text_color_btn)
+        self.temp_expander.add_row(self.temp_text_color_row)
         
         self.temp_outline_width_row = Adw.ActionRow(title="Outline Width")
         self.temp_outline_width_spin = Gtk.SpinButton.new_with_range(0, 10, 1)
@@ -421,12 +429,20 @@ class Weather(ActionBase):
         self.temp_expander.add_row(self.temp_outline_color_row)
 
         # Location Style Expander and rows
-        self.loc_expander = Adw.ExpanderRow(title="Location Style")
+        self.loc_expander = Adw.ExpanderRow(title="Location")
+        
+        # Add Location Name text field into the Location expander
+        self.loc_expander.add_row(self.loc_entry)
         
         self.loc_font_row = Adw.ActionRow(title="Font")
         self.loc_font_btn = Gtk.FontButton()
         self.loc_font_row.add_suffix(self.loc_font_btn)
         self.loc_expander.add_row(self.loc_font_row)
+        
+        self.loc_text_color_row = Adw.ActionRow(title="Color")
+        self.loc_text_color_btn = Gtk.ColorButton()
+        self.loc_text_color_row.add_suffix(self.loc_text_color_btn)
+        self.loc_expander.add_row(self.loc_text_color_row)
         
         self.loc_outline_width_row = Adw.ActionRow(title="Outline Width")
         self.loc_outline_width_spin = Gtk.SpinButton.new_with_range(0, 10, 1)
@@ -451,16 +467,18 @@ class Weather(ActionBase):
         self.loc_entry.connect("notify::text", self.on_loc_changed)
         
         self.temp_font_btn.connect("font-set", self.on_temp_font_changed)
+        self.temp_text_color_btn.connect("color-set", self.on_temp_text_color_changed)
         self.temp_outline_width_spin.connect("value-changed", self.on_temp_outline_width_changed)
         self.temp_outline_color_btn.connect("color-set", self.on_temp_outline_color_changed)
         
         self.loc_font_btn.connect("font-set", self.on_loc_font_changed)
+        self.loc_text_color_btn.connect("color-set", self.on_loc_text_color_changed)
         self.loc_outline_width_spin.connect("value-changed", self.on_loc_outline_width_changed)
         self.loc_outline_color_btn.connect("color-set", self.on_loc_outline_color_changed)
         
         self.units_row.combo_box.connect("changed", self.on_units_changed)
 
-        return [self.loc_entry, self.lat_entry, self.lon_entry, self.units_row, self.temp_expander, self.loc_expander]
+        return [self.lat_entry, self.lon_entry, self.units_row, self.temp_expander, self.loc_expander]
 
     def load_units_model(self):
         self.units_model.append([self.plugin_base.lm.get("actions.units.celsius"), 1])
@@ -500,6 +518,13 @@ class Weather(ActionBase):
         self.set_settings(settings)
         self.show(force=True)
 
+    def on_temp_text_color_changed(self, btn, *args):
+        settings = self.get_settings()
+        rgba = btn.get_rgba()
+        settings["text_color_temp"] = [int(rgba.red * 255), int(rgba.green * 255), int(rgba.blue * 255), int(rgba.alpha * 255)]
+        self.set_settings(settings)
+        self.show(force=True)
+
     def on_temp_outline_width_changed(self, spin, *args):
         settings = self.get_settings()
         settings["outline_width_temp"] = int(spin.get_value())
@@ -516,6 +541,13 @@ class Weather(ActionBase):
     def on_loc_font_changed(self, btn, *args):
         settings = self.get_settings()
         settings["font_desc_loc"] = btn.get_font()
+        self.set_settings(settings)
+        self.show(force=True)
+
+    def on_loc_text_color_changed(self, btn, *args):
+        settings = self.get_settings()
+        rgba = btn.get_rgba()
+        settings["text_color_loc"] = [int(rgba.red * 255), int(rgba.green * 255), int(rgba.blue * 255), int(rgba.alpha * 255)]
         self.set_settings(settings)
         self.show(force=True)
 
@@ -550,6 +582,14 @@ class Weather(ActionBase):
         rgba_temp.alpha = color_temp[3] / 255.0
         self.temp_outline_color_btn.set_rgba(rgba_temp)
 
+        rgba_text_temp = Gdk.RGBA()
+        color_text_temp = settings.get("text_color_temp", [255, 255, 255, 255])
+        rgba_text_temp.red = color_text_temp[0] / 255.0
+        rgba_text_temp.green = color_text_temp[1] / 255.0
+        rgba_text_temp.blue = color_text_temp[2] / 255.0
+        rgba_text_temp.alpha = color_text_temp[3] / 255.0
+        self.temp_text_color_btn.set_rgba(rgba_text_temp)
+
         # Loc Style Row Values
         self.loc_font_btn.set_font(settings.get("font_desc_loc", "DejaVu Sans Bold 9"))
         self.loc_outline_width_spin.set_value(float(settings.get("outline_width_loc", 2)))
@@ -561,6 +601,14 @@ class Weather(ActionBase):
         rgba_loc.blue = color_loc[2] / 255.0
         rgba_loc.alpha = color_loc[3] / 255.0
         self.loc_outline_color_btn.set_rgba(rgba_loc)
+
+        rgba_text_loc = Gdk.RGBA()
+        color_text_loc = settings.get("text_color_loc", [255, 255, 255, 255])
+        rgba_text_loc.red = color_text_loc[0] / 255.0
+        rgba_text_loc.green = color_text_loc[1] / 255.0
+        rgba_text_loc.blue = color_text_loc[2] / 255.0
+        rgba_text_loc.alpha = color_text_loc[3] / 255.0
+        self.loc_text_color_btn.set_rgba(rgba_text_loc)
 
         if settings.get("unit") == 2:  # Imperial
             self.units_row.combo_box.set_active(1)
@@ -924,45 +972,44 @@ class Weather(ActionBase):
         
         settings = self.get_settings()
         font_desc_temp = settings.get("font_desc_temp", "DejaVu Sans Bold 16")
-        
-        # Extract family, weight, style using Pango to resolve font path
-        try:
-            desc = Pango.FontDescription.from_string(font_desc_temp)
-            family = desc.get_family()
-            weight = desc.get_weight()
-            style = desc.get_style()
-            
-            query = family
-            style_list = []
-            if weight >= 700:
-                style_list.append("Bold")
-            if style == 2:
-                style_list.append("Italic")
-            elif style == 1:
-                style_list.append("Oblique")
-                
-            if style_list:
-                query += f":style={' '.join(style_list)}"
-                
-            import subprocess
-            result = subprocess.run(["fc-match", "-f", "%{file}\n", query], capture_output=True, text=True)
-            font_path = result.stdout.strip()
-        except Exception:
-            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-            
-        if not font_path or not os.path.exists(font_path):
-            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        font_desc_loc = settings.get("font_desc_loc", "DejaVu Sans Bold 9")
 
-        font_large = self.get_font(font_path, 28)
-        font_medium = self.get_font(font_path, 12)
-        font_title = self.get_font(font_path, 10)
-        font_text = self.get_font(font_path, 8)
-
+        # Get Text and Outline Colors/Widths
         outline_width_temp = int(settings.get("outline_width_temp", 2))
         outline_color_temp = tuple(settings.get("outline_color_temp", [0, 0, 0, 255]))
-        
+        text_color_temp = tuple(settings.get("text_color_temp", [255, 255, 255, 255]))
+
         outline_width_loc = int(settings.get("outline_width_loc", 2))
         outline_color_loc = tuple(settings.get("outline_color_loc", [0, 0, 0, 255]))
+        text_color_loc = tuple(settings.get("text_color_loc", [255, 255, 255, 255]))
+
+        # Calculate scale factors from default sizes
+        try:
+            desc_temp = Pango.FontDescription.from_string(font_desc_temp)
+            temp_base_size = desc_temp.get_size() / Pango.SCALE
+            if temp_base_size <= 0:
+                temp_base_size = 16.0
+        except Exception:
+            temp_base_size = 16.0
+        temp_scale = temp_base_size / 16.0
+
+        try:
+            desc_loc = Pango.FontDescription.from_string(font_desc_loc)
+            loc_base_size = desc_loc.get_size() / Pango.SCALE
+            if loc_base_size <= 0:
+                loc_base_size = 9.0
+        except Exception:
+            loc_base_size = 9.0
+        loc_scale = loc_base_size / 9.0
+
+        # Resolve scaled fonts
+        font_large = self.resolve_font_from_desc(font_desc_temp, 28, override_size=int(28 * temp_scale))
+        font_medium_temp = self.resolve_font_from_desc(font_desc_temp, 12, override_size=int(12 * temp_scale))
+        font_text_temp = self.resolve_font_from_desc(font_desc_temp, 8, override_size=int(8 * temp_scale))
+
+        font_medium = self.resolve_font_from_desc(font_desc_loc, 12, override_size=int(12 * loc_scale))
+        font_title = self.resolve_font_from_desc(font_desc_loc, 10, override_size=int(10 * loc_scale))
+        font_text = self.resolve_font_from_desc(font_desc_loc, 8, override_size=int(8 * loc_scale))
 
         current = weather_data.get("current", {})
         is_day = current.get("is_day", True)
@@ -1013,12 +1060,12 @@ class Weather(ActionBase):
             location_name = action_settings.get("location_name", "Weather")
             
             temp_text = f"{int(temp)}{temp_unit}"
-            draw.text((95, 15), temp_text, font=font_large, fill=(255, 255, 255, 255), stroke_width=outline_width_temp, stroke_fill=outline_color_temp)
-            draw.text((95, 50), location_name, font=font_medium, fill=(255, 255, 255, 255), stroke_width=outline_width_loc, stroke_fill=outline_color_loc)
+            draw.text((95, 15), temp_text, font=font_large, fill=text_color_temp, stroke_width=outline_width_temp, stroke_fill=outline_color_temp)
+            draw.text((95, 50), location_name, font=font_medium, fill=text_color_loc, stroke_width=outline_width_loc, stroke_fill=outline_color_loc)
             
         elif self.display_page == 1:
             # 5-Day Page
-            draw.text((100, 16), "5 Day Forecast", font=font_title, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+            draw.text((100, 14), "5 Day Forecast", font=font_title, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 10 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
             
             daily = weather_data.get("daily", {})
             days = daily.get("days", [])[:5]
@@ -1031,21 +1078,21 @@ class Weather(ActionBase):
                 cx = start_x + i * col_width
                 
                 day_label = f"{days[i]}." if days[i] else ""
-                draw.text((cx, 30), day_label, font=font_text, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+                draw.text((cx, 23), day_label, font=font_text, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 8 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
                 
                 code = codes[i] if i < len(codes) else 0
                 image_name = self.get_image_to_show(code, False)
-                icon_img = self.get_resized_icon(image_name, (18, 18))
+                icon_img = self.get_resized_icon(image_name, (28, 28))
                 if icon_img:
-                    canvas.paste(icon_img, (cx - 9, 36), icon_img)
+                    canvas.paste(icon_img, (cx - 14, 31), icon_img)
                     
                 t_max = max_temps[i] if i < len(max_temps) else 0
                 temp_text = f"{int(t_max)}°"
-                draw.text((cx, 64), temp_text, font=font_medium, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+                draw.text((cx, 72), temp_text, font=font_medium_temp, fill=text_color_temp, anchor="mm", stroke_width=max(1, round(outline_width_temp * 12 / 28)) if outline_width_temp > 0 else 0, stroke_fill=outline_color_temp)
                 
         elif self.display_page == 2:
             # Hourly Page
-            draw.text((100, 16), "Hourly Forecast", font=font_title, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+            draw.text((100, 14), "Hourly Forecast", font=font_title, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 10 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
             
             hourly = weather_data.get("hourly", {})
             times = hourly.get("times", [])[:24]
@@ -1070,14 +1117,14 @@ class Weather(ActionBase):
                     
                 draw.line(points, fill=(255, 215, 0, 255), width=2)
                 
-                draw.text((graph_x_start - 6, graph_y_start), f"{int(min_t)}°", font=font_text, fill=(255, 255, 255, 255), anchor="rm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
-                draw.text((graph_x_end + 6, graph_y_end), f"{int(max_t)}°", font=font_text, fill=(255, 255, 255, 255), anchor="lm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+                draw.text((graph_x_start - 6, graph_y_start), f"{int(min_t)}°", font=font_text_temp, fill=text_color_temp, anchor="rm", stroke_width=max(1, round(outline_width_temp * 8 / 28)) if outline_width_temp > 0 else 0, stroke_fill=outline_color_temp)
+                draw.text((graph_x_end + 6, graph_y_end), f"{int(max_t)}°", font=font_text_temp, fill=text_color_temp, anchor="lm", stroke_width=max(1, round(outline_width_temp * 8 / 28)) if outline_width_temp > 0 else 0, stroke_fill=outline_color_temp)
                 
                 x_labels = [0, 3, 6, 9, 11]
                 for idx in x_labels:
                     if idx < len(times):
                         px = int(graph_x_start + idx * dx)
-                        draw.text((px, 74), times[idx], font=font_text, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+                        draw.text((px, 74), times[idx], font=font_text, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 8 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
                         
         dot_y = 92
         dot_spacing = 10
@@ -1142,6 +1189,9 @@ class Weather(ActionBase):
         
         outline_color_temp = tuple(action_settings.get("outline_color_temp", [0, 0, 0, 255]))
         outline_color_loc = tuple(action_settings.get("outline_color_loc", [0, 0, 0, 255]))
+        
+        text_color_temp = tuple(action_settings.get("text_color_temp", [255, 255, 255, 255]))
+        text_color_loc = tuple(action_settings.get("text_color_loc", [255, 255, 255, 255]))
 
         font_temp = self.resolve_font_from_desc(font_desc_temp, 16)
         font_loc = self.resolve_font_from_desc(font_desc_loc, 9)
@@ -1149,12 +1199,12 @@ class Weather(ActionBase):
         draw = ImageDraw.Draw(canvas)
 
         temp_text = f"{int(temp)}{temp_unit}"
-        draw.text((width / 2, 68), temp_text, font=font_temp, fill=(255, 255, 255, 255), anchor="mm", stroke_width=outline_width_temp, stroke_fill=outline_color_temp)
+        draw.text((width / 2, 68), temp_text, font=font_temp, fill=text_color_temp, anchor="mm", stroke_width=outline_width_temp, stroke_fill=outline_color_temp)
         
         loc_display = location_name
         if len(loc_display) > 16:
             loc_display = loc_display[:14] + ".."
-        draw.text((width / 2, 88), loc_display, font=font_loc, fill=(255, 255, 255, 255), anchor="mm", stroke_width=outline_width_loc, stroke_fill=outline_color_loc)
+        draw.text((width / 2, 88), loc_display, font=font_loc, fill=text_color_loc, anchor="mm", stroke_width=outline_width_loc, stroke_fill=outline_color_loc)
         
         return canvas
 
