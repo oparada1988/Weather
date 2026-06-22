@@ -246,6 +246,8 @@ class Weather(ActionBase):
         self.cached_weather = None
         self.last_fetch_time = None
         self.icon_cache = {}
+        self.cycle_timer: Timer = None
+        self.cycle_step_timer: Timer = None
         self.init_fonts()
         
     def init_fonts(self):
@@ -370,11 +372,19 @@ class Weather(ActionBase):
 
     def on_ready(self):
         self.show()
+        if isinstance(self.input_ident, Input.Dial):
+            self.start_cycle_timer()
 
     def on_key_down(self):
         self.show(force=True)
 
     def event_callback(self, event: InputEvent, data: dict = None):
+        # Cancel any active automatic cycle steps on manual interaction
+        if self.cycle_step_timer is not None:
+            self.cycle_step_timer.cancel()
+            self.cycle_step_timer = None
+            self.start_cycle_timer()
+
         if event == Input.Dial.Events.TURN_CW:
             self.display_page = (self.display_page + 1) % 3
             self.reset_page_timer()
@@ -435,6 +445,19 @@ class Weather(ActionBase):
         self.refresh_cell_renderer = Gtk.CellRendererText()
         self.refresh_row.combo_box.pack_start(self.refresh_cell_renderer, True)
         self.refresh_row.combo_box.add_attribute(self.refresh_cell_renderer, "text", 0)
+
+        # Cycle Interval Row (only for dials)
+        self.cycle_model = Gtk.ListStore.new([str, int])
+        self.cycle_model.append(["Disabled", 0])
+        self.cycle_model.append(["Every 15 Minutes", 15])
+        self.cycle_model.append(["Every 30 Minutes", 30])
+        self.cycle_model.append(["Every 45 Minutes", 45])
+        self.cycle_model.append(["Every Hour", 60])
+        
+        self.cycle_row = ComboRow(title="Automatic Cycle", model=self.cycle_model)
+        self.cycle_cell_renderer = Gtk.CellRendererText()
+        self.cycle_row.combo_box.pack_start(self.cycle_cell_renderer, True)
+        self.cycle_row.combo_box.add_attribute(self.cycle_cell_renderer, "text", 0)
 
         # Temperature Style Expander and rows
         self.temp_expander = Adw.ExpanderRow(title="Temperature")
@@ -515,7 +538,11 @@ class Weather(ActionBase):
         self.wc_key_row.connect("notify::text", self.on_wc_key_changed)
         self.refresh_row.combo_box.connect("changed", self.on_refresh_changed)
 
-        return [
+        is_dial = isinstance(self.input_ident, Input.Dial)
+        if is_dial:
+            self.cycle_row.combo_box.connect("changed", self.on_cycle_changed)
+
+        rows = [
             self.units_row,
             self.provider_row,
             self.lat_entry,
@@ -523,10 +550,12 @@ class Weather(ActionBase):
             self.owm_key_row,
             self.wu_key_row,
             self.wc_key_row,
-            self.refresh_row,
-            self.temp_expander,
-            self.loc_expander
+            self.refresh_row
         ]
+        if is_dial:
+            rows.append(self.cycle_row)
+        rows.extend([self.temp_expander, self.loc_expander])
+        return rows
 
     def load_units_model(self):
         self.units_model.append([self.plugin_base.lm.get("actions.units.celsius"), 1])
@@ -597,6 +626,75 @@ class Weather(ActionBase):
             self.set_settings(settings)
             self.show_interval = interval
             self.show(force=True)
+
+    def on_cycle_changed(self, combo_box, *args):
+        active = combo_box.get_active()
+        if active >= 0:
+            interval = self.cycle_model[active][1]
+            settings = self.get_settings()
+            settings["cycle_interval"] = interval
+            self.set_settings(settings)
+            self.start_cycle_timer()
+
+    def start_cycle_timer(self):
+        if self.cycle_timer is not None:
+            self.cycle_timer.cancel()
+            self.cycle_timer = None
+        if self.cycle_step_timer is not None:
+            self.cycle_step_timer.cancel()
+            self.cycle_step_timer = None
+            
+        settings = self.get_settings()
+        cycle_interval = settings.get("cycle_interval", 0) # 0 means disabled
+        
+        if cycle_interval > 0:
+            self.cycle_timer = Timer(cycle_interval * 60, self.trigger_cycle)
+            self.cycle_timer.start()
+
+    def trigger_cycle(self):
+        if not self.get_is_present():
+            return
+        # Stop any active page reversion/step timers
+        if self.page_timer is not None:
+            self.page_timer.cancel()
+            self.page_timer = None
+        if self.cycle_step_timer is not None:
+            self.cycle_step_timer.cancel()
+            self.cycle_step_timer = None
+
+        # Start the step transition: Page 0 (Current) -> Page 1 (5-day) -> Page 2 (Hourly) -> Page 0 (Current)
+        self.display_page = 0
+        self.show()
+        
+        self.cycle_step_timer = Timer(5.0, self.cycle_step_1)
+        self.cycle_step_timer.start()
+
+    def cycle_step_1(self):
+        if not self.get_is_present():
+            return
+        self.display_page = 1
+        self.show()
+        
+        self.cycle_step_timer = Timer(5.0, self.cycle_step_2)
+        self.cycle_step_timer.start()
+
+    def cycle_step_2(self):
+        if not self.get_is_present():
+            return
+        self.display_page = 2
+        self.show()
+        
+        self.cycle_step_timer = Timer(5.0, self.cycle_step_end)
+        self.cycle_step_timer.start()
+
+    def cycle_step_end(self):
+        if not self.get_is_present():
+            return
+        self.display_page = 0
+        self.show()
+        
+        # Schedule the next cycle!
+        self.start_cycle_timer()
 
     def update_visibility(self):
         active = self.provider_row.combo_box.get_active()
@@ -750,6 +848,19 @@ class Weather(ActionBase):
                 active_refresh_idx = i
                 break
         self.refresh_row.combo_box.set_active(active_refresh_idx)
+
+        # Load Cycle Interval (only for dials)
+        if isinstance(self.input_ident, Input.Dial):
+            cycle_interval = settings.get("cycle_interval", 0)
+            active_cycle_idx = 0
+            for i, row in enumerate(self.cycle_model):
+                if row[1] == cycle_interval:
+                    active_cycle_idx = i
+                    break
+            self.cycle_row.combo_box.set_active(active_cycle_idx)
+            
+            # Start/Restart cycle timer
+            self.start_cycle_timer()
 
     def show(self, force=False):
         if not self.get_is_present():
