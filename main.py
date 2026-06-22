@@ -32,18 +32,6 @@ from src.backend.DeckManagement.DeckController import DeckController
 from src.backend.PageManagement.Page import Page
 
 
-# Helper functions for dynamic background gradients
-def create_linear_gradient(start_color, end_color, width, height):
-    base = Image.new("RGBA", (width, height), start_color)
-    top = Image.new("RGBA", (width, height), end_color)
-    mask = Image.new("L", (width, height))
-    mask_data = []
-    for y in range(height):
-        mask_data.extend([int(255 * (y / (height - 1)))] * width)
-    mask.putdata(mask_data)
-    return Image.composite(top, base, mask)
-
-
 # Normalization helper functions
 def owm_to_wmo(code):
     if 200 <= code < 300:
@@ -280,6 +268,29 @@ class Weather(ActionBase):
                 return resized
         except Exception as e:
             log.error(f"Error loading icon {name}: {e}")
+            return None
+
+    def get_resized_background(self, name, size_tuple):
+        cache_key = ("bg_" + name, size_tuple)
+        if cache_key in self.icon_cache:
+            return self.icon_cache[cache_key]
+        
+        filename_map = {
+            "dawn": "Dawn.png",
+            "day": "Day.png",
+            "dusk": "dusk.png",
+            "night": "night.png"
+        }
+        filename = filename_map.get(name, "Day.png")
+        bg_path = os.path.join(self.plugin_base.PATH, "assets", "sky-cycles", filename)
+        
+        try:
+            with Image.open(bg_path) as img:
+                resized = img.convert("RGBA").resize(size_tuple, Image.Resampling.LANCZOS)
+                self.icon_cache[cache_key] = resized
+                return resized
+        except Exception as e:
+            log.error(f"Error loading background {name}: {e}")
             return None
 
     def on_ready(self):
@@ -757,21 +768,11 @@ class Weather(ActionBase):
         else:
             time_of_day = "day"
             
-        if time_of_day == "day":
-            top_color = (36, 123, 226, 255)
-            bottom_color = (122, 220, 255, 255)
-        elif time_of_day == "night":
-            top_color = (10, 10, 26, 255)
-            bottom_color = (31, 28, 59, 255)
-        elif time_of_day == "dawn":
-            top_color = (68, 64, 107, 255)
-            bottom_color = (253, 164, 137, 255)
-        else:  # dusk
-            top_color = (41, 37, 79, 255)
-            bottom_color = (226, 88, 126, 255)
-            
-        bg = create_linear_gradient(top_color, bottom_color, width, height)
-        canvas.paste(bg, (0, 0))
+        bg = self.get_resized_background(time_of_day, (width, height))
+        if bg:
+            canvas.paste(bg, (0, 0))
+        else:
+            draw.rectangle([0, 0, width, height], fill=(0, 0, 0, 255))
         
         if time_of_day == "night":
             stars = [(20, 15), (60, 25), (140, 15), (180, 30), (90, 20)]
