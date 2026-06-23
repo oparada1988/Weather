@@ -1752,8 +1752,6 @@ class Weather(ActionBase):
             
         elif page == 1:
             # 5-Day Page
-            draw.text((100, 14), "5 Day Forecast", font=font_title, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 10 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
-            
             daily = weather_data.get("daily", {})
             days = daily.get("days", [])[:5]
             codes = daily.get("codes", [])[:5]
@@ -1765,17 +1763,17 @@ class Weather(ActionBase):
                 cx = start_x + i * col_width
                 
                 day_label = f"{days[i]}." if days[i] else ""
-                draw.text((cx, 23), day_label, font=font_text, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 8 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
+                draw.text((cx, 16), day_label, font=font_text, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 8 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
                 
                 code = codes[i] if i < len(codes) else 0
                 image_name = self.get_image_to_show(code, False)
                 icon_img = self.get_resized_icon(image_name, (28, 28))
                 if icon_img:
-                    canvas.paste(icon_img, (cx - 14, 31), icon_img)
+                    canvas.paste(icon_img, (cx - 14, 25), icon_img)
                     
                 t_max = max_temps[i] if i < len(max_temps) else 0
                 temp_text = f"{int(t_max)}°"
-                draw.text((cx, 72), temp_text, font=font_medium_temp, fill=text_color_temp, anchor="mm", stroke_width=max(1, round(outline_width_temp * 12 / 28)) if outline_width_temp > 0 else 0, stroke_fill=outline_color_temp)
+                draw.text((cx, 68), temp_text, font=font_medium_temp, fill=text_color_temp, anchor="mm", stroke_width=max(1, round(outline_width_temp * 12 / 28)) if outline_width_temp > 0 else 0, stroke_fill=outline_color_temp)
                 
         elif page == 2:
             # Hourly Page
