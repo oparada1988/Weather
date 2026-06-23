@@ -537,7 +537,10 @@ class Weather(ActionBase):
         self.lat_entry = Adw.EntryRow(title=self.plugin_base.lm.get("actions.lat-entry.title"), input_purpose=Gtk.InputPurpose.NUMBER)
         self.lon_entry = Adw.EntryRow(title=self.plugin_base.lm.get("actions.long-entry.title"), input_purpose=Gtk.InputPurpose.NUMBER)
         self.loc_entry = Adw.EntryRow(title="Location Name")
-        self.show_bg_row = Adw.SwitchRow(title="Show Background")
+        self.show_bg_row = Adw.ActionRow(title="Show Background")
+        self.show_bg_switch = Gtk.Switch()
+        self.show_bg_switch.set_valign(Gtk.Align.CENTER)
+        self.show_bg_row.add_suffix(self.show_bg_switch)
 
         # Refresh Interval Row
         self.refresh_model = Gtk.ListStore.new([str, int])
@@ -694,7 +697,7 @@ class Weather(ActionBase):
         self.lat_entry.connect("notify::text", self.on_lat_changed)
         self.lon_entry.connect("notify::text", self.on_lon_changed)
         self.loc_entry.connect("notify::text", self.on_loc_changed)
-        self.show_bg_row.connect("notify::active", self.on_show_background_changed)
+        self.show_bg_switch.connect("notify::active", self.on_show_background_changed)
         
         self.temp_font_btn.connect("font-set", self.on_temp_font_changed)
         self.temp_text_color_btn.connect("color-set", self.on_temp_text_color_changed)
@@ -895,19 +898,6 @@ class Weather(ActionBase):
         # Schedule the next cycle!
         self.start_cycle_timer()
 
-    def update_visibility(self):
-        active = self.provider_row.combo_box.get_active()
-        if active >= 0:
-            provider = self.provider_model[active][1]
-        else:
-            provider = "open-meteo"
-            
-        self.owm_key_row.set_visible(provider == "openweathermap")
-        self.wu_key_row.set_visible(provider == "wunderground")
-        self.wc_key_row.set_visible(provider == "weathercom")
-        self.lat_entry.set_visible(provider == "open-meteo")
-        self.lon_entry.set_visible(provider == "open-meteo")
-
     def on_temp_font_changed(self, btn, *args):
         settings = self.get_settings()
         settings["font_desc_temp"] = btn.get_font()
@@ -1019,7 +1009,7 @@ class Weather(ActionBase):
         self.lat_entry.set_text(settings.get("lat", ""))  # Does not accept None
         self.lon_entry.set_text(settings.get("lon", ""))  # Does not accept None
         self.loc_entry.set_text(settings.get("location_name", "Washington DC"))
-        self.show_bg_row.set_active(settings.get("show_background", True))
+        self.show_bg_switch.set_active(settings.get("show_background", True))
 
         # Temp Style Row Values
         self.temp_font_btn.set_font(settings.get("font_desc_temp", "DejaVu Sans Bold 16"))
