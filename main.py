@@ -1881,6 +1881,7 @@ class Weather(ActionBase):
     def render_button_image(self, weather_data) -> Image.Image:
         width, height = 113, 113
         canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        action_settings = self.get_settings()
         
         current = weather_data.get("current", {})
         is_day = current.get("is_day", True)
@@ -1913,7 +1914,6 @@ class Weather(ActionBase):
         # Draw temperature and location text
         temp = current.get("temperature", 0)
         temp_unit = current.get("temperature_unit", "°C")
-        action_settings = self.get_settings()
         location_name = action_settings.get("location_name", "Weather")
         
         # Paste weather icon
