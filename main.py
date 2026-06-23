@@ -90,6 +90,105 @@ def is_rain_or_snow(code):
     )
 
 
+# Backward compatibility alignment parsers
+def parse_halign(val, default=0.0):
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return float(val)
+    val_str = str(val).lower()
+    if val_str == "left":
+        return -1.0
+    elif val_str == "center":
+        return 0.0
+    elif val_str == "right":
+        return 1.0
+    try:
+        return float(val)
+    except ValueError:
+        return default
+
+
+def parse_valign(val, default=0.0):
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return float(val)
+    val_str = str(val).lower()
+    if val_str == "bottom":
+        return -1.0
+    elif val_str in ("middle", "center"):
+        return 0.0
+    elif val_str == "top":
+        return 1.0
+    try:
+        return float(val)
+    except ValueError:
+        return default
+
+
+def get_text_layout(val_h, val_v, h_coords, v_coords):
+    # Interpolate H
+    x_c = h_coords["center"]
+    if val_h < 0:
+        x_l = h_coords["left"]
+        tx = x_c + val_h * (x_c - x_l)
+    else:
+        x_r = h_coords["right"]
+        tx = x_c + val_h * (x_r - x_c)
+        
+    # Interpolate V
+    y_m = v_coords["middle"]
+    if val_v < 0:
+        y_b = v_coords["bottom"]
+        ty = y_m - val_v * (y_b - y_m)  # negative is down
+    else:
+        y_t = v_coords["top"]
+        ty = y_m - val_v * (y_m - y_t)  # positive is up
+        
+    # Determine anchors
+    if val_h < -0.5:
+        th = "l"
+    elif val_h > 0.5:
+        th = "r"
+    else:
+        th = "m"
+        
+    if val_v < -0.5:
+        tv = "b"
+    elif val_v > 0.5:
+        tv = "t"
+    else:
+        tv = "m"
+        
+    return tx, ty, th + tv
+
+
+def get_icon_layout(val_h, val_v, width, height, icon_w, icon_h, h_offsets=(15, 15), v_offsets=(10, 10)):
+    # Calculate boundaries
+    left_x = h_offsets[0]
+    right_x = width - icon_w - h_offsets[1]
+    center_x = (width - icon_w) / 2
+    
+    top_y = v_offsets[0]
+    bottom_y = height - icon_h - v_offsets[1]
+    center_y = (height - icon_h) / 2
+    
+    # Interpolate H
+    if val_h < 0:
+        ix = center_x + val_h * (center_x - left_x)
+    else:
+        ix = center_x + val_h * (right_x - center_x)
+        
+    # Interpolate V
+    if val_v < 0:
+        iy = center_y - val_v * (bottom_y - center_y)
+    else:
+        iy = center_y - val_v * (center_y - top_y)
+        
+    return int(ix), int(iy)
+
+
 class WindDirection(ActionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -438,23 +537,7 @@ class Weather(ActionBase):
         self.lat_entry = Adw.EntryRow(title=self.plugin_base.lm.get("actions.lat-entry.title"), input_purpose=Gtk.InputPurpose.NUMBER)
         self.lon_entry = Adw.EntryRow(title=self.plugin_base.lm.get("actions.long-entry.title"), input_purpose=Gtk.InputPurpose.NUMBER)
         self.loc_entry = Adw.EntryRow(title="Location Name")
-
-        # Weather Provider Row
-        self.provider_model = Gtk.ListStore.new([str, str])
-        self.provider_model.append(["Open-Meteo", "open-meteo"])
-        self.provider_model.append(["OpenWeatherMap", "openweathermap"])
-        self.provider_model.append(["Weather Underground", "wunderground"])
-        self.provider_model.append(["Weather.com", "weathercom"])
-        
-        self.provider_row = ComboRow(title="Weather Provider", model=self.provider_model)
-        self.provider_cell_renderer = Gtk.CellRendererText()
-        self.provider_row.combo_box.pack_start(self.provider_cell_renderer, True)
-        self.provider_row.combo_box.add_attribute(self.provider_cell_renderer, "text", 0)
-
-        # Provider-specific API Key Rows
-        self.owm_key_row = Adw.EntryRow(title="OpenWeatherMap API Key")
-        self.wu_key_row = Adw.EntryRow(title="Weather Underground API Key")
-        self.wc_key_row = Adw.EntryRow(title="Weather.com API Key")
+        self.show_bg_row = Adw.SwitchRow(title="Show Background")
 
         # Refresh Interval Row
         self.refresh_model = Gtk.ListStore.new([str, int])
@@ -484,27 +567,31 @@ class Weather(ActionBase):
         
         self.icon_size_row = Adw.ActionRow(title="Icon Size (%)")
         self.icon_size_spin = Gtk.SpinButton.new_with_range(10, 200, 5)
+        self.icon_size_reset = Gtk.Button.new_from_icon_name("edit-undo-symbolic")
+        self.icon_size_reset.add_css_class("flat")
+        self.icon_size_reset.set_tooltip_text("Reset to default")
         self.icon_size_row.add_suffix(self.icon_size_spin)
+        self.icon_size_row.add_suffix(self.icon_size_reset)
         self.icon_expander.add_row(self.icon_size_row)
         
-        self.icon_halign_model = Gtk.ListStore.new([str, str])
-        self.icon_halign_model.append(["Left", "left"])
-        self.icon_halign_model.append(["Center", "center"])
-        self.icon_halign_model.append(["Right", "right"])
-        self.icon_halign_row = ComboRow(title="Horizontal Alignment", model=self.icon_halign_model)
-        self.icon_halign_cell = Gtk.CellRendererText()
-        self.icon_halign_row.combo_box.pack_start(self.icon_halign_cell, True)
-        self.icon_halign_row.combo_box.add_attribute(self.icon_halign_cell, "text", 0)
+        self.icon_halign_row = Adw.ActionRow(title="Horizontal Alignment")
+        self.icon_halign_spin = Gtk.SpinButton.new_with_range(-2.0, 2.0, 0.1)
+        self.icon_halign_spin.set_digits(1)
+        self.icon_halign_reset = Gtk.Button.new_from_icon_name("edit-undo-symbolic")
+        self.icon_halign_reset.add_css_class("flat")
+        self.icon_halign_reset.set_tooltip_text("Reset to default")
+        self.icon_halign_row.add_suffix(self.icon_halign_spin)
+        self.icon_halign_row.add_suffix(self.icon_halign_reset)
         self.icon_expander.add_row(self.icon_halign_row)
 
-        self.icon_valign_model = Gtk.ListStore.new([str, str])
-        self.icon_valign_model.append(["Top", "top"])
-        self.icon_valign_model.append(["Middle", "middle"])
-        self.icon_valign_model.append(["Bottom", "bottom"])
-        self.icon_valign_row = ComboRow(title="Vertical Alignment", model=self.icon_valign_model)
-        self.icon_valign_cell = Gtk.CellRendererText()
-        self.icon_valign_row.combo_box.pack_start(self.icon_valign_cell, True)
-        self.icon_valign_row.combo_box.add_attribute(self.icon_valign_cell, "text", 0)
+        self.icon_valign_row = Adw.ActionRow(title="Vertical Alignment")
+        self.icon_valign_spin = Gtk.SpinButton.new_with_range(-2.0, 2.0, 0.1)
+        self.icon_valign_spin.set_digits(1)
+        self.icon_valign_reset = Gtk.Button.new_from_icon_name("edit-undo-symbolic")
+        self.icon_valign_reset.add_css_class("flat")
+        self.icon_valign_reset.set_tooltip_text("Reset to default")
+        self.icon_valign_row.add_suffix(self.icon_valign_spin)
+        self.icon_valign_row.add_suffix(self.icon_valign_reset)
         self.icon_expander.add_row(self.icon_valign_row)
 
         # Temperature Style Expander and rows
@@ -530,24 +617,24 @@ class Weather(ActionBase):
         self.temp_outline_color_row.add_suffix(self.temp_outline_color_btn)
         self.temp_expander.add_row(self.temp_outline_color_row)
 
-        self.temp_halign_model = Gtk.ListStore.new([str, str])
-        self.temp_halign_model.append(["Left", "left"])
-        self.temp_halign_model.append(["Center", "center"])
-        self.temp_halign_model.append(["Right", "right"])
-        self.temp_halign_row = ComboRow(title="Horizontal Alignment", model=self.temp_halign_model)
-        self.temp_halign_cell = Gtk.CellRendererText()
-        self.temp_halign_row.combo_box.pack_start(self.temp_halign_cell, True)
-        self.temp_halign_row.combo_box.add_attribute(self.temp_halign_cell, "text", 0)
+        self.temp_halign_row = Adw.ActionRow(title="Horizontal Alignment")
+        self.temp_halign_spin = Gtk.SpinButton.new_with_range(-2.0, 2.0, 0.1)
+        self.temp_halign_spin.set_digits(1)
+        self.temp_halign_reset = Gtk.Button.new_from_icon_name("edit-undo-symbolic")
+        self.temp_halign_reset.add_css_class("flat")
+        self.temp_halign_reset.set_tooltip_text("Reset to default")
+        self.temp_halign_row.add_suffix(self.temp_halign_spin)
+        self.temp_halign_row.add_suffix(self.temp_halign_reset)
         self.temp_expander.add_row(self.temp_halign_row)
 
-        self.temp_valign_model = Gtk.ListStore.new([str, str])
-        self.temp_valign_model.append(["Top", "top"])
-        self.temp_valign_model.append(["Middle", "middle"])
-        self.temp_valign_model.append(["Bottom", "bottom"])
-        self.temp_valign_row = ComboRow(title="Vertical Alignment", model=self.temp_valign_model)
-        self.temp_valign_cell = Gtk.CellRendererText()
-        self.temp_valign_row.combo_box.pack_start(self.temp_valign_cell, True)
-        self.temp_valign_row.combo_box.add_attribute(self.temp_valign_cell, "text", 0)
+        self.temp_valign_row = Adw.ActionRow(title="Vertical Alignment")
+        self.temp_valign_spin = Gtk.SpinButton.new_with_range(-2.0, 2.0, 0.1)
+        self.temp_valign_spin.set_digits(1)
+        self.temp_valign_reset = Gtk.Button.new_from_icon_name("edit-undo-symbolic")
+        self.temp_valign_reset.add_css_class("flat")
+        self.temp_valign_reset.set_tooltip_text("Reset to default")
+        self.temp_valign_row.add_suffix(self.temp_valign_spin)
+        self.temp_valign_row.add_suffix(self.temp_valign_reset)
         self.temp_expander.add_row(self.temp_valign_row)
 
         # Location Style Expander and rows
@@ -576,24 +663,24 @@ class Weather(ActionBase):
         self.loc_outline_color_row.add_suffix(self.loc_outline_color_btn)
         self.loc_expander.add_row(self.loc_outline_color_row)
 
-        self.loc_halign_model = Gtk.ListStore.new([str, str])
-        self.loc_halign_model.append(["Left", "left"])
-        self.loc_halign_model.append(["Center", "center"])
-        self.loc_halign_model.append(["Right", "right"])
-        self.loc_halign_row = ComboRow(title="Horizontal Alignment", model=self.loc_halign_model)
-        self.loc_halign_cell = Gtk.CellRendererText()
-        self.loc_halign_row.combo_box.pack_start(self.loc_halign_cell, True)
-        self.loc_halign_row.combo_box.add_attribute(self.loc_halign_cell, "text", 0)
+        self.loc_halign_row = Adw.ActionRow(title="Horizontal Alignment")
+        self.loc_halign_spin = Gtk.SpinButton.new_with_range(-2.0, 2.0, 0.1)
+        self.loc_halign_spin.set_digits(1)
+        self.loc_halign_reset = Gtk.Button.new_from_icon_name("edit-undo-symbolic")
+        self.loc_halign_reset.add_css_class("flat")
+        self.loc_halign_reset.set_tooltip_text("Reset to default")
+        self.loc_halign_row.add_suffix(self.loc_halign_spin)
+        self.loc_halign_row.add_suffix(self.loc_halign_reset)
         self.loc_expander.add_row(self.loc_halign_row)
 
-        self.loc_valign_model = Gtk.ListStore.new([str, str])
-        self.loc_valign_model.append(["Top", "top"])
-        self.loc_valign_model.append(["Middle", "middle"])
-        self.loc_valign_model.append(["Bottom", "bottom"])
-        self.loc_valign_row = ComboRow(title="Vertical Alignment", model=self.loc_valign_model)
-        self.loc_valign_cell = Gtk.CellRendererText()
-        self.loc_valign_row.combo_box.pack_start(self.loc_valign_cell, True)
-        self.loc_valign_row.combo_box.add_attribute(self.loc_valign_cell, "text", 0)
+        self.loc_valign_row = Adw.ActionRow(title="Vertical Alignment")
+        self.loc_valign_spin = Gtk.SpinButton.new_with_range(-2.0, 2.0, 0.1)
+        self.loc_valign_spin.set_digits(1)
+        self.loc_valign_reset = Gtk.Button.new_from_icon_name("edit-undo-symbolic")
+        self.loc_valign_reset.add_css_class("flat")
+        self.loc_valign_reset.set_tooltip_text("Reset to default")
+        self.loc_valign_row.add_suffix(self.loc_valign_spin)
+        self.loc_valign_row.add_suffix(self.loc_valign_reset)
         self.loc_expander.add_row(self.loc_valign_row)
 
         self.units_cell_renderer = Gtk.CellRendererText()
@@ -607,45 +694,74 @@ class Weather(ActionBase):
         self.lat_entry.connect("notify::text", self.on_lat_changed)
         self.lon_entry.connect("notify::text", self.on_lon_changed)
         self.loc_entry.connect("notify::text", self.on_loc_changed)
+        self.show_bg_row.connect("notify::active", self.on_show_background_changed)
         
         self.temp_font_btn.connect("font-set", self.on_temp_font_changed)
         self.temp_text_color_btn.connect("color-set", self.on_temp_text_color_changed)
         self.temp_outline_width_spin.connect("value-changed", self.on_temp_outline_width_changed)
         self.temp_outline_color_btn.connect("color-set", self.on_temp_outline_color_changed)
-        self.temp_halign_row.combo_box.connect("changed", self.on_temp_halign_changed)
-        self.temp_valign_row.combo_box.connect("changed", self.on_temp_valign_changed)
         
         self.loc_font_btn.connect("font-set", self.on_loc_font_changed)
         self.loc_text_color_btn.connect("color-set", self.on_loc_text_color_changed)
         self.loc_outline_width_spin.connect("value-changed", self.on_loc_outline_width_changed)
         self.loc_outline_color_btn.connect("color-set", self.on_loc_outline_color_changed)
-        self.loc_halign_row.combo_box.connect("changed", self.on_loc_halign_changed)
-        self.loc_valign_row.combo_box.connect("changed", self.on_loc_valign_changed)
-        
-        self.icon_size_spin.connect("value-changed", self.on_icon_size_changed)
-        self.icon_halign_row.combo_box.connect("changed", self.on_icon_halign_changed)
-        self.icon_valign_row.combo_box.connect("changed", self.on_icon_valign_changed)
         
         self.units_row.combo_box.connect("changed", self.on_units_changed)
-        
-        self.provider_row.combo_box.connect("changed", self.on_provider_changed)
-        self.owm_key_row.connect("notify::text", self.on_owm_key_changed)
-        self.wu_key_row.connect("notify::text", self.on_wu_key_changed)
-        self.wc_key_row.connect("notify::text", self.on_wc_key_changed)
         self.refresh_row.combo_box.connect("changed", self.on_refresh_changed)
 
         is_dial = isinstance(self.input_ident, Input.Dial)
+
+        # Reset button callbacks
+        def on_icon_size_reset_clicked(btn):
+            self.icon_size_spin.set_value(100.0)
+
+        def on_icon_halign_reset_clicked(btn):
+            self.icon_halign_spin.set_value(-1.0 if is_dial else 0.0)
+
+        def on_icon_valign_reset_clicked(btn):
+            self.icon_valign_spin.set_value(0.0 if is_dial else 1.0)
+
+        def on_temp_halign_reset_clicked(btn):
+            self.temp_halign_spin.set_value(-1.0 if is_dial else 0.0)
+
+        def on_temp_valign_reset_clicked(btn):
+            self.temp_valign_spin.set_value(1.0 if is_dial else 0.0)
+
+        def on_loc_halign_reset_clicked(btn):
+            self.loc_halign_spin.set_value(-1.0 if is_dial else 0.0)
+
+        def on_loc_valign_reset_clicked(btn):
+            self.loc_valign_spin.set_value(0.0 if is_dial else -1.0)
+
+        self.icon_size_spin.connect("value-changed", self.on_icon_size_changed)
+        self.icon_size_reset.connect("clicked", on_icon_size_reset_clicked)
+
+        self.icon_halign_spin.connect("value-changed", self.on_icon_halign_changed)
+        self.icon_halign_reset.connect("clicked", on_icon_halign_reset_clicked)
+
+        self.icon_valign_spin.connect("value-changed", self.on_icon_valign_changed)
+        self.icon_valign_reset.connect("clicked", on_icon_valign_reset_clicked)
+
+        self.temp_halign_spin.connect("value-changed", self.on_temp_halign_changed)
+        self.temp_halign_reset.connect("clicked", on_temp_halign_reset_clicked)
+
+        self.temp_valign_spin.connect("value-changed", self.on_temp_valign_changed)
+        self.temp_valign_reset.connect("clicked", on_temp_valign_reset_clicked)
+
+        self.loc_halign_spin.connect("value-changed", self.on_loc_halign_changed)
+        self.loc_halign_reset.connect("clicked", on_loc_halign_reset_clicked)
+
+        self.loc_valign_spin.connect("value-changed", self.on_loc_valign_changed)
+        self.loc_valign_reset.connect("clicked", on_loc_valign_reset_clicked)
+
         if is_dial:
             self.cycle_row.combo_box.connect("changed", self.on_cycle_changed)
 
         rows = [
             self.units_row,
-            self.provider_row,
             self.lat_entry,
             self.lon_entry,
-            self.owm_key_row,
-            self.wu_key_row,
-            self.wc_key_row,
+            self.show_bg_row,
             self.refresh_row
         ]
         if is_dial:
@@ -691,33 +807,14 @@ class Weather(ActionBase):
         self.set_settings(settings)
         self.show_async(force=True)
 
-    def on_provider_changed(self, combo, *args):
-        active = combo.get_active()
-        if active >= 0:
-            provider = self.provider_model[active][1]
-            settings = self.get_settings()
-            settings["provider"] = provider
-            self.set_settings(settings)
-            self.update_visibility()
-            self.show_async(force=True)
-
-    def on_owm_key_changed(self, entry, *args):
-        settings = self.get_settings()
-        settings["api_key_openweathermap"] = entry.get_text()
-        self.set_settings(settings)
-        self.show_async(force=True)
-
-    def on_wu_key_changed(self, entry, *args):
-        settings = self.get_settings()
-        settings["api_key_wunderground"] = entry.get_text()
-        self.set_settings(settings)
-        self.show_async(force=True)
-
-    def on_wc_key_changed(self, entry, *args):
-        settings = self.get_settings()
-        settings["api_key_weathercom"] = entry.get_text()
-        self.set_settings(settings)
-        self.show_async(force=True)
+    def update_visibility(self):
+        global_settings = self.plugin_base.get_settings()
+        if not global_settings:
+            global_settings = {}
+        provider = global_settings.get("provider", "open-meteo")
+            
+        self.lat_entry.set_visible(provider == "open-meteo")
+        self.lon_entry.set_visible(provider == "open-meteo")
 
     def on_refresh_changed(self, combo_box, *args):
         active = combo_box.get_active()
@@ -869,65 +966,60 @@ class Weather(ActionBase):
         self.set_settings(settings)
         self.show_async(force=False)
 
-    def on_icon_halign_changed(self, combo, *args):
-        active = combo.get_active()
-        if active >= 0:
-            val = self.icon_halign_model[active][1]
-            settings = self.get_settings()
-            settings["icon_halign"] = val
-            self.set_settings(settings)
-            self.show_async(force=False)
+    def on_icon_halign_changed(self, spin, *args):
+        val = float(spin.get_value())
+        settings = self.get_settings()
+        settings["icon_halign"] = val
+        self.set_settings(settings)
+        self.show_async(force=False)
 
-    def on_icon_valign_changed(self, combo, *args):
-        active = combo.get_active()
-        if active >= 0:
-            val = self.icon_valign_model[active][1]
-            settings = self.get_settings()
-            settings["icon_valign"] = val
-            self.set_settings(settings)
-            self.show_async(force=False)
+    def on_icon_valign_changed(self, spin, *args):
+        val = float(spin.get_value())
+        settings = self.get_settings()
+        settings["icon_valign"] = val
+        self.set_settings(settings)
+        self.show_async(force=False)
 
-    def on_temp_halign_changed(self, combo, *args):
-        active = combo.get_active()
-        if active >= 0:
-            val = self.temp_halign_model[active][1]
-            settings = self.get_settings()
-            settings["temp_halign"] = val
-            self.set_settings(settings)
-            self.show_async(force=False)
+    def on_temp_halign_changed(self, spin, *args):
+        val = float(spin.get_value())
+        settings = self.get_settings()
+        settings["temp_halign"] = val
+        self.set_settings(settings)
+        self.show_async(force=False)
 
-    def on_temp_valign_changed(self, combo, *args):
-        active = combo.get_active()
-        if active >= 0:
-            val = self.temp_valign_model[active][1]
-            settings = self.get_settings()
-            settings["temp_valign"] = val
-            self.set_settings(settings)
-            self.show_async(force=False)
+    def on_temp_valign_changed(self, spin, *args):
+        val = float(spin.get_value())
+        settings = self.get_settings()
+        settings["temp_valign"] = val
+        self.set_settings(settings)
+        self.show_async(force=False)
 
-    def on_loc_halign_changed(self, combo, *args):
-        active = combo.get_active()
-        if active >= 0:
-            val = self.loc_halign_model[active][1]
-            settings = self.get_settings()
-            settings["loc_halign"] = val
-            self.set_settings(settings)
-            self.show_async(force=False)
+    def on_loc_halign_changed(self, spin, *args):
+        val = float(spin.get_value())
+        settings = self.get_settings()
+        settings["loc_halign"] = val
+        self.set_settings(settings)
+        self.show_async(force=False)
 
-    def on_loc_valign_changed(self, combo, *args):
-        active = combo.get_active()
-        if active >= 0:
-            val = self.loc_valign_model[active][1]
-            settings = self.get_settings()
-            settings["loc_valign"] = val
-            self.set_settings(settings)
-            self.show_async(force=False)
+    def on_loc_valign_changed(self, spin, *args):
+        val = float(spin.get_value())
+        settings = self.get_settings()
+        settings["loc_valign"] = val
+        self.set_settings(settings)
+        self.show_async(force=False)
+
+    def on_show_background_changed(self, row, *args):
+        settings = self.get_settings()
+        settings["show_background"] = row.get_active()
+        self.set_settings(settings)
+        self.show_async(force=False)
 
     def load_config_defaults(self):
         settings = self.get_settings()
         self.lat_entry.set_text(settings.get("lat", ""))  # Does not accept None
         self.lon_entry.set_text(settings.get("lon", ""))  # Does not accept None
         self.loc_entry.set_text(settings.get("location_name", "Washington DC"))
+        self.show_bg_row.set_active(settings.get("show_background", True))
 
         # Temp Style Row Values
         self.temp_font_btn.set_font(settings.get("font_desc_temp", "DejaVu Sans Bold 16"))
@@ -975,85 +1067,31 @@ class Weather(ActionBase):
         # Load alignments
         is_dial = isinstance(self.input_ident, Input.Dial)
         
-        icon_halign = settings.get("icon_halign", "left" if is_dial else "center")
-        active_idx = 0
-        for i, row in enumerate(self.icon_halign_model):
-            if row[1] == icon_halign:
-                active_idx = i
-                break
-        self.icon_halign_row.combo_box.set_active(active_idx)
+        icon_halign = parse_halign(settings.get("icon_halign"), -1.0 if is_dial else 0.0)
+        self.icon_halign_spin.set_value(icon_halign)
 
-        icon_valign = settings.get("icon_valign", "middle" if is_dial else "top")
-        active_idx = 0
-        for i, row in enumerate(self.icon_valign_model):
-            if row[1] == icon_valign:
-                active_idx = i
-                break
-        self.icon_valign_row.combo_box.set_active(active_idx)
+        icon_valign = parse_valign(settings.get("icon_valign"), 0.0 if is_dial else 1.0)
+        self.icon_valign_spin.set_value(icon_valign)
 
         # Temp alignments
-        temp_halign = settings.get("temp_halign", "left" if is_dial else "center")
-        active_idx = 0
-        for i, row in enumerate(self.temp_halign_model):
-            if row[1] == temp_halign:
-                active_idx = i
-                break
-        self.temp_halign_row.combo_box.set_active(active_idx)
+        temp_halign = parse_halign(settings.get("temp_halign"), -1.0 if is_dial else 0.0)
+        self.temp_halign_spin.set_value(temp_halign)
 
-        temp_valign = settings.get("temp_valign", "top" if is_dial else "middle")
-        active_idx = 0
-        for i, row in enumerate(self.temp_valign_model):
-            if row[1] == temp_valign:
-                active_idx = i
-                break
-        self.temp_valign_row.combo_box.set_active(active_idx)
+        temp_valign = parse_valign(settings.get("temp_valign"), 1.0 if is_dial else 0.0)
+        self.temp_valign_spin.set_value(temp_valign)
 
         # Loc alignments
-        loc_halign = settings.get("loc_halign", "left" if is_dial else "center")
-        active_idx = 0
-        for i, row in enumerate(self.loc_halign_model):
-            if row[1] == loc_halign:
-                active_idx = i
-                break
-        self.loc_halign_row.combo_box.set_active(active_idx)
+        loc_halign = parse_halign(settings.get("loc_halign"), -1.0 if is_dial else 0.0)
+        self.loc_halign_spin.set_value(loc_halign)
 
-        loc_valign = settings.get("loc_valign", "middle" if is_dial else "bottom")
-        active_idx = 0
-        for i, row in enumerate(self.loc_valign_model):
-            if row[1] == loc_valign:
-                active_idx = i
-                break
-        self.loc_valign_row.combo_box.set_active(active_idx)
+        loc_valign = parse_valign(settings.get("loc_valign"), 0.0 if is_dial else -1.0)
+        self.loc_valign_spin.set_value(loc_valign)
 
         if settings.get("unit") == 2:  # Imperial
             self.units_row.combo_box.set_active(1)
         else:  # Celsius and none
             self.units_row.combo_box.set_active(0)
 
-        # Load Provider-specific setting values
-        # Default global setting as fallback for provider
-        global_settings = self.plugin_base.get_settings()
-        if not global_settings:
-            global_settings = {}
-        provider = settings.get("provider", global_settings.get("provider", "open-meteo"))
-        
-        # Load API keys (defaulting to global api_key if not set specifically)
-        global_api_key = global_settings.get("api_key", "")
-        owm_key = settings.get("api_key_openweathermap", global_api_key if provider == "openweathermap" else "")
-        wu_key = settings.get("api_key_wunderground", global_api_key if provider == "wunderground" else "")
-        wc_key = settings.get("api_key_weathercom", global_api_key if provider == "weathercom" else "")
-        
-        self.owm_key_row.set_text(owm_key)
-        self.wu_key_row.set_text(wu_key)
-        self.wc_key_row.set_text(wc_key)
-        
-        active_idx = 0
-        for i, row in enumerate(self.provider_model):
-            if row[1] == provider:
-                active_idx = i
-                break
-        self.provider_row.combo_box.set_active(active_idx)
-        
         self.update_visibility()
 
         # Load Refresh Interval
@@ -1086,6 +1124,9 @@ class Weather(ActionBase):
         # Stop timer if active
         if self.show_timer is not None:
             self.show_timer.cancel()
+
+        if force:
+            self.icon_cache.clear()
 
         settings = self.get_settings()
         self.show_interval = settings.get("refresh_interval", 30)
@@ -1138,10 +1179,11 @@ class Weather(ActionBase):
             log.error(f"Open-Meteo geocoding failed: {e}")
 
         # Fallback to OWM geocoding if API key is present and provider is OWM
-        settings = self.get_settings()
         global_settings = self.plugin_base.get_settings()
-        provider = settings.get("provider", global_settings.get("provider", "open-meteo"))
-        api_key = settings.get(f"api_key_{provider}", settings.get("api_key", global_settings.get("api_key", "")))
+        if not global_settings:
+            global_settings = {}
+        provider = global_settings.get("provider", "open-meteo")
+        api_key = global_settings.get(f"api_key_{provider}", "")
         
         if provider == "openweathermap" and api_key:
             url_owm = "http://api.openweathermap.org/geo/1.0/direct"
@@ -1198,13 +1240,13 @@ class Weather(ActionBase):
                     settings["resolved_lon"] = lon
                     self.set_settings(settings)
 
-        # Check action-level provider settings with fallback to global settings
+        # Fetch global provider settings
         global_settings = self.plugin_base.get_settings()
         if not global_settings:
             global_settings = {}
             
-        provider = settings.get("provider", global_settings.get("provider", "open-meteo"))
-        api_key = settings.get(f"api_key_{provider}", settings.get("api_key", global_settings.get("api_key", "")))
+        provider = global_settings.get("provider", "open-meteo")
+        api_key = global_settings.get(f"api_key_{provider}", "")
 
         if not has_coords:
             return None
@@ -1594,16 +1636,18 @@ class Weather(ActionBase):
         else:
             bg_name = "forecast"
             
-        bg = self.get_resized_background(bg_name, (width, height))
-        if bg:
-            canvas.paste(bg, (0, 0))
-        else:
-            draw.rectangle([0, 0, width, height], fill=(0, 0, 0, 255))
-        
-        if page == 0 and bg_name == "night":
-            stars = [(20, 15), (60, 25), (140, 15), (180, 30), (90, 20)]
-            for sx, sy in stars:
-                draw.ellipse([sx - 1, sy - 1, sx + 1, sy + 1], fill=(255, 255, 255, 180))
+        show_bg = settings.get("show_background", True)
+        if show_bg:
+            bg = self.get_resized_background(bg_name, (width, height))
+            if bg:
+                canvas.paste(bg, (0, 0))
+            else:
+                draw.rectangle([0, 0, width, height], fill=(0, 0, 0, 255))
+            
+            if page == 0 and bg_name == "night":
+                stars = [(20, 15), (60, 25), (140, 15), (180, 30), (90, 20)]
+                for sx, sy in stars:
+                    draw.ellipse([sx - 1, sy - 1, sx + 1, sy + 1], fill=(255, 255, 255, 180))
                 
         if page == 0:
             # Current Page
@@ -1616,25 +1660,9 @@ class Weather(ActionBase):
             
             icon_img = self.get_resized_icon(image_name, (icon_w, icon_h))
             if icon_img:
-                icon_halign = settings.get("icon_halign", "left")
-                icon_valign = settings.get("icon_valign", "middle")
-                
-                # X coordinate calculation
-                if icon_halign == "left":
-                    ix = 15
-                elif icon_halign == "right":
-                    ix = width - icon_w - 15
-                else: # center
-                    ix = int((width - icon_w) / 2)
-                    
-                # Y coordinate calculation
-                if icon_valign == "top":
-                    iy = 10
-                elif icon_valign == "bottom":
-                    iy = height - icon_h - 10
-                else: # middle
-                    iy = int((height - icon_h) / 2)
-                    
+                icon_halign = parse_halign(settings.get("icon_halign"), -1.0)
+                icon_valign = parse_valign(settings.get("icon_valign"), 0.0)
+                ix, iy = get_icon_layout(icon_halign, icon_valign, width, height, icon_w, icon_h, h_offsets=(15, 15), v_offsets=(10, 10))
                 canvas.paste(icon_img, (ix, iy), icon_img)
                 
             temp = current.get("temperature", 0)
@@ -1645,32 +1673,22 @@ class Weather(ActionBase):
             temp_text = f"{int(temp)}{temp_unit}"
             
             # Temperature layout
-            temp_halign = settings.get("temp_halign", "left")
-            temp_valign = settings.get("temp_valign", "top")
+            temp_halign = parse_halign(settings.get("temp_halign"), -1.0)
+            temp_valign = parse_valign(settings.get("temp_valign"), 1.0)
             
             tx_coords = {"left": 95, "center": 100, "right": 185}
             ty_coords = {"top": 15, "middle": 35, "bottom": 55}
-            th_char = {"left": "l", "center": "m", "right": "r"}[temp_halign]
-            tv_char = {"top": "t", "middle": "m", "bottom": "b"}[temp_valign]
-            
-            tx = tx_coords[temp_halign]
-            ty = ty_coords[temp_valign]
-            t_anchor = th_char + tv_char
+            tx, ty, t_anchor = get_text_layout(temp_halign, temp_valign, tx_coords, ty_coords)
             
             draw.text((tx, ty), temp_text, font=font_large, fill=text_color_temp, stroke_width=outline_width_temp, stroke_fill=outline_color_temp, anchor=t_anchor)
             
             # Location layout
-            loc_halign = settings.get("loc_halign", "left")
-            loc_valign = settings.get("loc_valign", "middle")
+            loc_halign = parse_halign(settings.get("loc_halign"), -1.0)
+            loc_valign = parse_valign(settings.get("loc_valign"), 0.0)
             
             lx_coords = {"left": 95, "center": 100, "right": 185}
             ly_coords = {"top": 35, "middle": 50, "bottom": 70}
-            lh_char = {"left": "l", "center": "m", "right": "r"}[loc_halign]
-            lv_char = {"top": "t", "middle": "m", "bottom": "b"}[loc_valign]
-            
-            lx = lx_coords[loc_halign]
-            ly = ly_coords[loc_valign]
-            l_anchor = lh_char + lv_char
+            lx, ly, l_anchor = get_text_layout(loc_halign, loc_valign, lx_coords, ly_coords)
             
             draw.text((lx, ly), location_name, font=font_medium, fill=text_color_loc, stroke_width=outline_width_loc, stroke_fill=outline_color_loc, anchor=l_anchor)
             
@@ -1825,12 +1843,14 @@ class Weather(ActionBase):
             else:
                 time_of_day = "day"
             bg_name = "button_" + time_of_day
-        bg = self.get_resized_background(bg_name, (width, height))
-        if bg:
-            canvas.paste(bg, (0, 0))
-        else:
-            draw = ImageDraw.Draw(canvas)
-            draw.rectangle([0, 0, width, height], fill=(0, 0, 0, 255))
+        show_bg = action_settings.get("show_background", True)
+        if show_bg:
+            bg = self.get_resized_background(bg_name, (width, height))
+            if bg:
+                canvas.paste(bg, (0, 0))
+            else:
+                draw = ImageDraw.Draw(canvas)
+                draw.rectangle([0, 0, width, height], fill=(0, 0, 0, 255))
             
         # Draw temperature and location text
         temp = current.get("temperature", 0)
@@ -1848,25 +1868,9 @@ class Weather(ActionBase):
         
         icon_img = self.get_resized_icon(image_name, (icon_w, icon_h))
         if icon_img:
-            icon_halign = action_settings.get("icon_halign", "center")
-            icon_valign = action_settings.get("icon_valign", "top")
-            
-            # X coordinate calculation
-            if icon_halign == "left":
-                ix = 10
-            elif icon_halign == "right":
-                ix = width - icon_w - 10
-            else: # center
-                ix = int((width - icon_w) / 2)
-                
-            # Y coordinate calculation
-            if icon_valign == "top":
-                iy = 12
-            elif icon_valign == "bottom":
-                iy = height - icon_h - 12
-            else: # middle
-                iy = int((height - icon_h) / 2)
-                
+            icon_halign = parse_halign(action_settings.get("icon_halign"), 0.0)
+            icon_valign = parse_valign(action_settings.get("icon_valign"), 1.0)
+            ix, iy = get_icon_layout(icon_halign, icon_valign, width, height, icon_w, icon_h, h_offsets=(10, 10), v_offsets=(12, 12))
             canvas.paste(icon_img, (ix, iy), icon_img)
             
         font_desc_temp = action_settings.get("font_desc_temp", "DejaVu Sans Bold 16")
@@ -1889,32 +1893,22 @@ class Weather(ActionBase):
         temp_text = f"{int(temp)}{temp_unit}"
         
         # Temperature layout on Button
-        temp_halign = action_settings.get("temp_halign", "center")
-        temp_valign = action_settings.get("temp_valign", "middle")
+        temp_halign = parse_halign(action_settings.get("temp_halign"), 0.0)
+        temp_valign = parse_valign(action_settings.get("temp_valign"), 0.0)
         
         tx_coords = {"left": 15, "center": width / 2, "right": width - 15}
         ty_coords = {"top": 56, "middle": 68, "bottom": 80}
-        th_char = {"left": "l", "center": "m", "right": "r"}[temp_halign]
-        tv_char = {"top": "t", "middle": "m", "bottom": "b"}[temp_valign]
-        
-        tx = tx_coords[temp_halign]
-        ty = ty_coords[temp_valign]
-        t_anchor = th_char + tv_char
+        tx, ty, t_anchor = get_text_layout(temp_halign, temp_valign, tx_coords, ty_coords)
         
         draw.text((tx, ty), temp_text, font=font_temp, fill=text_color_temp, stroke_width=outline_width_temp, stroke_fill=outline_color_temp, anchor=t_anchor)
         
         # Location layout on Button
-        loc_halign = action_settings.get("loc_halign", "center")
-        loc_valign = action_settings.get("loc_valign", "bottom")
+        loc_halign = parse_halign(action_settings.get("loc_halign"), 0.0)
+        loc_valign = parse_valign(action_settings.get("loc_valign"), -1.0)
         
         lx_coords = {"left": 15, "center": width / 2, "right": width - 15}
         ly_coords = {"top": 76, "middle": 88, "bottom": 100}
-        lh_char = {"left": "l", "center": "m", "right": "r"}[loc_halign]
-        lv_char = {"top": "t", "middle": "m", "bottom": "b"}[loc_valign]
-        
-        lx = lx_coords[loc_halign]
-        ly = ly_coords[loc_valign]
-        l_anchor = lh_char + lv_char
+        lx, ly, l_anchor = get_text_layout(loc_halign, loc_valign, lx_coords, ly_coords)
         
         loc_display = location_name
         if len(loc_display) > 16:
@@ -2060,7 +2054,88 @@ class WeatherPlugin(PluginBase):
                 self.set_settings(s)
                 
         icon_pack_row.combo_box.connect("changed", on_icon_pack_changed)
-        
         group.add(icon_pack_row)
+
+        # Weather Provider Row
+        provider_model = Gtk.ListStore.new([str, str])
+        provider_model.append(["Open-Meteo", "open-meteo"])
+        provider_model.append(["OpenWeatherMap", "openweathermap"])
+        provider_model.append(["Weather Underground", "wunderground"])
+        provider_model.append(["Weather.com", "weathercom"])
+        
+        provider_row = ComboRow(title="Weather Provider", model=provider_model)
+        provider_cell_renderer = Gtk.CellRendererText()
+        provider_row.combo_box.pack_start(provider_cell_renderer, True)
+        provider_row.combo_box.add_attribute(provider_cell_renderer, "text", 0)
+        group.add(provider_row)
+
+        # Provider-specific API Key Rows
+        owm_key_row = Adw.EntryRow(title="OpenWeatherMap API Key")
+        wu_key_row = Adw.EntryRow(title="Weather Underground API Key")
+        wc_key_row = Adw.EntryRow(title="Weather.com API Key")
+        
+        group.add(owm_key_row)
+        group.add(wu_key_row)
+        group.add(wc_key_row)
+
+        # Load values from settings
+        provider = settings.get("provider", "open-meteo")
+        owm_key = settings.get("api_key_openweathermap", "")
+        wu_key = settings.get("api_key_wunderground", "")
+        wc_key = settings.get("api_key_weathercom", "")
+        
+        owm_key_row.set_text(owm_key)
+        wu_key_row.set_text(wu_key)
+        wc_key_row.set_text(wc_key)
+        
+        active_idx = 0
+        for i, row in enumerate(provider_model):
+            if row[1] == provider:
+                active_idx = i
+                break
+        provider_row.combo_box.set_active(active_idx)
+
+        # Helper function to update key row visibility in global settings
+        def update_global_visibility():
+            active = provider_row.combo_box.get_active()
+            if active >= 0:
+                prov = provider_model[active][1]
+            else:
+                prov = "open-meteo"
+            owm_key_row.set_visible(prov == "openweathermap")
+            wu_key_row.set_visible(prov == "wunderground")
+            wc_key_row.set_visible(prov == "weathercom")
+
+        update_global_visibility()
+
+        # Connect signals for global settings
+        def on_provider_changed(combo, *args):
+            active = combo.get_active()
+            if active >= 0:
+                prov = provider_model[active][1]
+                s = self.get_settings()
+                s["provider"] = prov
+                self.set_settings(s)
+                update_global_visibility()
+                
+        def on_owm_key_changed(entry, *args):
+            s = self.get_settings()
+            s["api_key_openweathermap"] = entry.get_text()
+            self.set_settings(s)
+            
+        def on_wu_key_changed(entry, *args):
+            s = self.get_settings()
+            s["api_key_wunderground"] = entry.get_text()
+            self.set_settings(s)
+            
+        def on_wc_key_changed(entry, *args):
+            s = self.get_settings()
+            s["api_key_weathercom"] = entry.get_text()
+            self.set_settings(s)
+
+        provider_row.combo_box.connect("changed", on_provider_changed)
+        owm_key_row.connect("notify::text", on_owm_key_changed)
+        wu_key_row.connect("notify::text", on_wu_key_changed)
+        wc_key_row.connect("notify::text", on_wc_key_changed)
         
         return group
