@@ -19,7 +19,6 @@ from loguru import logger as log
 import requests
 from threading import Timer, Thread
 import datetime
-import weakref
 
 # Add plugin to sys.paths
 sys.path.append(os.path.dirname(__file__))
@@ -89,37 +88,6 @@ def is_rain_or_snow(code):
         80 <= code <= 86 or
         95 <= code <= 99
     )
-
-
-def load_image(path, size_tuple=None):
-    if not path or not os.path.exists(path):
-        return None
-    
-    if path.endswith(".svg"):
-        try:
-            from gi.repository import GdkPixbuf
-            w, h = size_tuple if size_tuple else (128, 128)
-            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, w, h, True)
-            width = pixbuf.get_width()
-            height = pixbuf.get_height()
-            rowstride = pixbuf.get_rowstride()
-            has_alpha = pixbuf.get_has_alpha()
-            pixels = pixbuf.get_pixels()
-            
-            mode = "RGBA" if has_alpha else "RGB"
-            img = Image.frombytes(mode, (width, height), pixels, "raw", mode, rowstride)
-            return img
-        except Exception as e:
-            log.error(f"Error loading SVG icon {path} with GdkPixbuf: {e}")
-            
-    try:
-        with Image.open(path) as img:
-            if size_tuple:
-                return img.convert("RGBA").resize(size_tuple, Image.Resampling.LANCZOS)
-            return img.copy()
-    except Exception as e:
-        log.error(f"Error loading PNG icon {path}: {e}")
-        return None
 
 
 # Backward compatibility alignment parsers
@@ -222,11 +190,8 @@ def get_icon_layout(val_h, val_v, width, height, icon_w, icon_h, h_offsets=(15, 
 
 
 class WindDirection(ActionBase):
-    instances = weakref.WeakSet()
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        WindDirection.instances.add(self)
         self.show_interval = 30  # minutes
         self.show_timer: Timer = None
         self.cached_wind = None
@@ -365,10 +330,10 @@ class WindDirection(ActionBase):
 
         icon_path = self.plugin_base.get_icon_path("wind_direction")
         try:
-            image = load_image(icon_path, (128, 128))
-            if image is not None:
-                image = image.rotate(wind_direction, expand=True)
-                self.set_media(image=image, size=0.85, valign=-1)
+            with Image.open(icon_path) as img:
+                image = img.copy()
+            image = image.rotate(wind_direction, expand=True)
+            self.set_media(image=image, size=0.85, valign=-1)
         except Exception as e:
             log.error(f"Error drawing wind icon: {e}")
             self.show_error()
@@ -385,11 +350,8 @@ class WindDirection(ActionBase):
 
 
 class Weather(ActionBase):
-    instances = weakref.WeakSet()
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        Weather.instances.add(self)
         self.show_interval = 30  # minutes
         self.show_timer: Timer = None
         self.display_page = 0
@@ -427,11 +389,14 @@ class Weather(ActionBase):
             return self.icon_cache[cache_key]
         
         icon_path = self.plugin_base.get_icon_path(name)
-        img = load_image(icon_path, size_tuple)
-        if img:
-            self.icon_cache[cache_key] = img
-            return img
-        return None
+        try:
+            with Image.open(icon_path) as img:
+                resized = img.convert("RGBA").resize(size_tuple, Image.Resampling.LANCZOS)
+                self.icon_cache[cache_key] = resized
+                return resized
+        except Exception as e:
+            log.error(f"Error loading icon {name}: {e}")
+            return None
 
     def get_resized_background(self, name, size_tuple):
         cache_key = ("bg_" + name, size_tuple)
@@ -2071,12 +2036,6 @@ class WeatherPlugin(PluginBase):
         )
         self.add_action_holder(self.weather_holder)
 
-        # Connect to application to watch for settings dialog window
-        self.settings_window_conn_id = None
-        self.app = Gtk.Application.get_default()
-        if self.app:
-            self.settings_window_conn_id = self.app.connect("window-added", self.on_window_added)
-
         # Register plugin
         self.register(
             plugin_name=self.lm.get("plugin.name"),
@@ -2107,29 +2066,8 @@ class WeatherPlugin(PluginBase):
             except Exception as e:
                 log.error(f"Error loading icon pack icon {image_name}: {e}")
                 
-        # Get selected icon theme
-        icon_theme = settings.get("icon_theme", "default")
-        
-        theme_dir = os.path.join(self.PATH, "assets", "weather-icons", icon_theme)
-        if not os.path.isdir(theme_dir):
-            theme_dir = os.path.join(self.PATH, "assets", "weather-icons", "default")
-            
-        # Try finding the SVG first
-        svg_path = os.path.join(theme_dir, f"{image_name}.svg")
-        if os.path.exists(svg_path):
-            return svg_path
-            
-        # Fallback to PNG
-        png_path = os.path.join(theme_dir, f"{image_name}.png")
-        if os.path.exists(png_path):
-            return png_path
-            
-        # Global fallback (if some theme doesn't have it, try default theme SVG then PNG)
-        default_theme_dir = os.path.join(self.PATH, "assets", "weather-icons", "default")
-        svg_path = os.path.join(default_theme_dir, f"{image_name}.svg")
-        if os.path.exists(svg_path):
-            return svg_path
-        return os.path.join(default_theme_dir, f"{image_name}.png")
+        # Default fallback
+        return os.path.join(self.PATH, "assets", "weather-icons", f"{image_name}.png")
 
     def get_settings_area(self):
         group = Adw.PreferencesGroup(title="Global Weather Settings")
@@ -2175,92 +2113,3 @@ class WeatherPlugin(PluginBase):
         group.add(icon_pack_row)
 
         return group
-
-    def on_window_added(self, app, window):
-        classname = window.__class__.__name__
-        if classname == "PluginSettingsWindow":
-            try:
-                settings_page = getattr(window, "settings_page", None)
-                if settings_page and getattr(settings_page, "plugin_base", None) == self:
-                    GLib.idle_add(self.inject_theme_dropdown, window)
-            except Exception as e:
-                log.error(f"Error checking settings window: {e}")
-
-    def inject_theme_dropdown(self, window):
-        try:
-            assets_page = getattr(window, "assets_page", None)
-            if not assets_page:
-                def find_assets_page(widget):
-                    if isinstance(widget, Adw.PreferencesPage) and widget.get_title() == "Assets":
-                        return widget
-                    child = widget.get_first_child()
-                    while child is not None:
-                        res = find_assets_page(child)
-                        if res:
-                            return res
-                        child = child.get_next_sibling()
-                    return None
-                assets_page = find_assets_page(window)
-            
-            if not assets_page:
-                log.warning("Could not find Assets settings page")
-                return
-
-            if hasattr(assets_page, "_theme_selector_added") and assets_page._theme_selector_added:
-                return
-            assets_page._theme_selector_added = True
-
-            theme_group = Adw.PreferencesGroup(title="Icon Theme Selection")
-            
-            theme_model = Gtk.ListStore.new([str, str])
-            
-            themes_dir = os.path.join(self.PATH, "assets", "weather-icons")
-            themes = ["default"]
-            if os.path.exists(themes_dir):
-                for item in os.listdir(themes_dir):
-                    item_path = os.path.join(themes_dir, item)
-                    if os.path.isdir(item_path) and item != "default":
-                        themes.append(item)
-            
-            settings = self.get_settings()
-            current_theme = settings.get("icon_theme", "default")
-            
-            active_idx = 0
-            for i, theme in enumerate(themes):
-                theme_model.append([theme.capitalize(), theme])
-                if theme == current_theme:
-                    active_idx = i
-                    
-            theme_row = ComboRow(title="Icon Theme", model=theme_model)
-            theme_row.combo_box.set_active(active_idx)
-            
-            cell = Gtk.CellRendererText()
-            theme_row.combo_box.pack_start(cell, True)
-            theme_row.combo_box.add_attribute(cell, "text", 0)
-            
-            def on_theme_changed(combo, *args):
-                active = combo.get_active()
-                if active >= 0:
-                    selected_theme = theme_model[active][1]
-                    s = self.get_settings()
-                    s["icon_theme"] = selected_theme
-                    self.set_settings(s)
-                    
-                    for inst in list(WindDirection.instances):
-                        try:
-                            inst.show_async(force=True)
-                        except Exception:
-                            pass
-                    for inst in list(Weather.instances):
-                        try:
-                            inst.show_async(force=True)
-                        except Exception:
-                            pass
-                    
-            theme_row.combo_box.connect("changed", on_theme_changed)
-            theme_group.add(theme_row)
-            
-            assets_page.add(theme_group)
-            
-        except Exception as e:
-            log.error(f"Error injecting theme dropdown: {e}")
