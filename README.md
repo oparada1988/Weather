@@ -7,7 +7,9 @@ Support for StreamDeck Plus
    - Current Weather
    - 5 Day forecast
    - hourly forecast
- - Automatic page cycle with 15, 30, 45, minute, or one hour interval  
+  <img width="226" height="126" alt="Kooha-2026-06-23-09-14-47" src="https://github.com/user-attachments/assets/fc93de69-b26e-4a53-ac64-131f8857fe9a" />
+  
+   - Automatic page cycle with 15, 30, 45, minute, or one hour interval  
  - Weather update interval, 30 minutes, or one hour refresh option
  - provider options:
    - Open-Meteo
