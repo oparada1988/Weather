@@ -584,13 +584,12 @@ class Weather(ActionBase):
 
         # Icon Style Expander and rows
         self.icon_expander = Adw.ExpanderRow(title="Weather Icon")
-        
+
         self.icon_size_row = Adw.ActionRow(title="Icon Size (%)")
         self.icon_size_spin = Gtk.SpinButton.new_with_range(10, 200, 5)
         self.icon_size_reset = Gtk.Button.new_from_icon_name("edit-undo-symbolic")
         # self.icon_size_reset.add_css_class("flat")
         self.icon_size_reset.set_tooltip_text("Reset to default")
-                
         suffix_box = Gtk.Box(valign=Gtk.Align.CENTER, css_classes=["linked"])
         suffix_box.append(self.icon_size_spin)
         suffix_box.append(self.icon_size_reset)
