@@ -1815,27 +1815,13 @@ class Weather(ActionBase):
                 if icon_img:
                     canvas.paste(icon_img, (cx - 16, 18), icon_img)
                     
-                # 3. Precipitation Percentage
-                precip_val = precip_chances[i] if i < len(precip_chances) else 0
-                precip_text = f"{int(precip_val)}%"
-                precip_color = (100, 180, 255, 255) if precip_val > 0 else (170, 170, 170, 255)
-                draw.text(
-                    (cx, 56),
-                    precip_text,
-                    font=font_text_temp,
-                    fill=precip_color,
-                    anchor="mm",
-                    stroke_width=max(1, round(outline_width_temp * 8 / 28)) if outline_width_temp > 0 else 0,
-                    stroke_fill=outline_color_temp
-                )
-                
-                # 4. High / Low temperatures
+                # 3. High / Low temperatures
                 t_max = max_temps[i] if i < len(max_temps) else 0
                 t_min = min_temps[i] if i < len(min_temps) else 0
                 
                 # Draw high temp
                 draw.text(
-                    (cx - 3, 72),
+                    (cx - 3, 58),
                     f"{int(t_max)}°",
                     font=font_text_temp,
                     fill=text_color_temp,
@@ -1852,7 +1838,7 @@ class Weather(ActionBase):
                     255
                 )
                 draw.text(
-                    (cx, 72),
+                    (cx, 58),
                     "/",
                     font=font_text,
                     fill=slash_color,
@@ -1870,11 +1856,25 @@ class Weather(ActionBase):
                 )
                 low_temp_color = tuple(min(255, max(0, val)) for val in low_temp_color)
                 draw.text(
-                    (cx + 3, 72),
+                    (cx + 3, 58),
                     f"{int(t_min)}°",
                     font=font_text_temp,
                     fill=low_temp_color,
                     anchor="lm",
+                    stroke_width=max(1, round(outline_width_temp * 8 / 28)) if outline_width_temp > 0 else 0,
+                    stroke_fill=outline_color_temp
+                )
+                
+                # 4. Precipitation Percentage (Pre. {val}%)
+                precip_val = precip_chances[i] if i < len(precip_chances) else 0
+                precip_text = f"Pre. {int(precip_val)}%"
+                precip_color = (100, 180, 255, 255) if precip_val > 0 else (170, 170, 170, 255)
+                draw.text(
+                    (cx, 74),
+                    precip_text,
+                    font=font_text_temp,
+                    fill=precip_color,
+                    anchor="mm",
                     stroke_width=max(1, round(outline_width_temp * 8 / 28)) if outline_width_temp > 0 else 0,
                     stroke_fill=outline_color_temp
                 )
