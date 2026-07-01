@@ -761,13 +761,13 @@ class Weather(ActionBase):
             self.icon_valign_spin.set_value(0.0 if is_dial else 1.0)
 
         def on_temp_halign_reset_clicked(btn):
-            self.temp_halign_spin.set_value(-1.0 if is_dial else 0.0)
+            self.temp_halign_spin.set_value(0.0)
 
         def on_temp_valign_reset_clicked(btn):
-            self.temp_valign_spin.set_value(1.0 if is_dial else 0.0)
+            self.temp_valign_spin.set_value(0.0)
 
         def on_loc_halign_reset_clicked(btn):
-            self.loc_halign_spin.set_value(-1.0 if is_dial else 0.0)
+            self.loc_halign_spin.set_value(0.0)
 
         def on_loc_valign_reset_clicked(btn):
             self.loc_valign_spin.set_value(0.0 if is_dial else -1.0)
@@ -809,7 +809,7 @@ class Weather(ActionBase):
         ]
         if is_dial:
             rows.append(self.cycle_row)
-        rows.extend([self.icon_expander, self.temp_expander, self.loc_expander])
+        rows.extend([self.temp_expander, self.loc_expander])
         return rows
 
     def load_units_model(self):
@@ -1152,14 +1152,14 @@ class Weather(ActionBase):
         self.icon_valign_spin.set_value(icon_valign)
 
         # Temp alignments
-        temp_halign = parse_halign(settings.get("temp_halign"), -1.0 if is_dial else 0.0)
+        temp_halign = parse_halign(settings.get("temp_halign"), 0.0)
         self.temp_halign_spin.set_value(temp_halign)
 
-        temp_valign = parse_valign(settings.get("temp_valign"), 1.0 if is_dial else 0.0)
+        temp_valign = parse_valign(settings.get("temp_valign"), 0.0)
         self.temp_valign_spin.set_value(temp_valign)
 
         # Loc alignments
-        loc_halign = parse_halign(settings.get("loc_halign"), -1.0 if is_dial else 0.0)
+        loc_halign = parse_halign(settings.get("loc_halign"), 0.0)
         self.loc_halign_spin.set_value(loc_halign)
 
         loc_valign = parse_valign(settings.get("loc_valign"), 0.0 if is_dial else -1.0)
@@ -1769,15 +1769,13 @@ class Weather(ActionBase):
             weather_code = current.get("weather_code", 0)
             image_name = self.get_image_to_show(weather_code, not is_day)
             
-            icon_size_pct = settings.get("icon_size_pct", 100)
-            icon_w = int(48 * (icon_size_pct / 100.0))
-            icon_h = int(48 * (icon_size_pct / 100.0))
-            
+            # Static icon size and position (60x60, centered vertically at iy=20, ix=15)
+            icon_w = 60
+            icon_h = 60
             icon_img = self.get_resized_icon(image_name, (icon_w, icon_h))
             if icon_img:
-                icon_halign = parse_halign(settings.get("icon_halign"), -1.0)
-                icon_valign = parse_valign(settings.get("icon_valign"), 0.0)
-                ix, iy = get_icon_layout(icon_halign, icon_valign, width, height, icon_w, icon_h, h_offsets=(15, 15), v_offsets=(10, 10))
+                ix = 15
+                iy = 20
                 canvas.paste(icon_img, (ix, iy), icon_img)
                 
             temp = current.get("temperature", 0)
@@ -1788,21 +1786,21 @@ class Weather(ActionBase):
             temp_text = f"{int(temp)}{temp_unit}"
             
             # Temperature layout
-            temp_halign = parse_halign(settings.get("temp_halign"), -1.0)
-            temp_valign = parse_valign(settings.get("temp_valign"), 1.0)
+            temp_halign = parse_halign(settings.get("temp_halign"), 0.0)
+            temp_valign = parse_valign(settings.get("temp_valign"), 0.0)
             
-            tx_coords = {"left": 95, "center": 100, "right": 185}
-            ty_coords = {"top": 15, "middle": 35, "bottom": 55}
+            tx_coords = {"left": 95, "center": 140, "right": 185}
+            ty_coords = {"top": 15, "middle": 30, "bottom": 45}
             tx, ty, t_anchor = get_text_layout(temp_halign, temp_valign, tx_coords, ty_coords)
             
             draw.text((tx, ty), temp_text, font=font_large, fill=text_color_temp, stroke_width=outline_width_temp, stroke_fill=outline_color_temp, anchor=t_anchor)
             
             # Location layout
-            loc_halign = parse_halign(settings.get("loc_halign"), -1.0)
+            loc_halign = parse_halign(settings.get("loc_halign"), 0.0)
             loc_valign = parse_valign(settings.get("loc_valign"), 0.0)
             
-            lx_coords = {"left": 95, "center": 100, "right": 185}
-            ly_coords = {"top": 35, "middle": 50, "bottom": 70}
+            lx_coords = {"left": 95, "center": 140, "right": 185}
+            ly_coords = {"top": 55, "middle": 70, "bottom": 85}
             lx, ly, l_anchor = get_text_layout(loc_halign, loc_valign, lx_coords, ly_coords)
             
             # Align location name in the middle below the temperature
@@ -2058,15 +2056,12 @@ class Weather(ActionBase):
         weather_code = current.get("weather_code", 0)
         image_name = self.get_image_to_show(weather_code, not is_day)
         
-        icon_size_pct = action_settings.get("icon_size_pct", 100)
-        icon_w = int(44 * (icon_size_pct / 100.0))
-        icon_h = int(44 * (icon_size_pct / 100.0))
-        
+        # Static icon size and position (44x44, top center)
+        icon_w = 44
+        icon_h = 44
         icon_img = self.get_resized_icon(image_name, (icon_w, icon_h))
         if icon_img:
-            icon_halign = parse_halign(action_settings.get("icon_halign"), 0.0)
-            icon_valign = parse_valign(action_settings.get("icon_valign"), 1.0)
-            ix, iy = get_icon_layout(icon_halign, icon_valign, width, height, icon_w, icon_h, h_offsets=(10, 10), v_offsets=(12, 12))
+            ix, iy = get_icon_layout(0.0, 1.0, width, height, icon_w, icon_h, h_offsets=(10, 10), v_offsets=(12, 12))
             canvas.paste(icon_img, (ix, iy), icon_img)
             
         font_desc_temp = action_settings.get("font_desc_temp", "DejaVu Sans Bold 16")
