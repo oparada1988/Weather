@@ -1699,10 +1699,12 @@ class Weather(ActionBase):
         font_large = self.resolve_font_from_desc(font_desc_temp, 28, override_size=int(28 * temp_scale))
         font_medium_temp = self.resolve_font_from_desc(font_desc_temp, 12, override_size=int(12 * temp_scale))
         font_text_temp = self.resolve_font_from_desc(font_desc_temp, 8, override_size=int(8 * temp_scale))
+        font_small_temp = self.resolve_font_from_desc(font_desc_temp, 10, override_size=int(10 * temp_scale))
 
         font_medium = self.resolve_font_from_desc(font_desc_loc, 12, override_size=int(12 * loc_scale))
         font_title = self.resolve_font_from_desc(font_desc_loc, 10, override_size=int(10 * loc_scale))
         font_text = self.resolve_font_from_desc(font_desc_loc, 8, override_size=int(8 * loc_scale))
+        font_small_text = self.resolve_font_from_desc(font_desc_loc, 10, override_size=int(10 * loc_scale))
 
         current = weather_data.get("current", {})
         is_day = current.get("is_day", True)
@@ -1796,37 +1798,37 @@ class Weather(ActionBase):
             for i in range(len(days)):
                 cx = centers[i]
                 
-                # 1. Day label
+                # 1. Day label (increased to 10px font, y=11)
                 day_label = f"{days[i]}." if days[i] else ""
                 draw.text(
-                    (cx, 12),
+                    (cx, 11),
                     day_label,
-                    font=font_text,
+                    font=font_small_text,
                     fill=text_color_loc,
                     anchor="mm",
-                    stroke_width=max(1, round(outline_width_loc * 8 / 12)) if outline_width_loc > 0 else 0,
+                    stroke_width=max(1, round(outline_width_loc * 10 / 12)) if outline_width_loc > 0 else 0,
                     stroke_fill=outline_color_loc
                 )
                 
-                # 2. Weather Icon
+                # 2. Weather Icon (increased to 38x38, y=17 to 55)
                 code = codes[i] if i < len(codes) else 0
                 image_name = self.get_image_to_show(code, False)
-                icon_img = self.get_resized_icon(image_name, (32, 32))
+                icon_img = self.get_resized_icon(image_name, (38, 38))
                 if icon_img:
-                    canvas.paste(icon_img, (cx - 16, 18), icon_img)
+                    canvas.paste(icon_img, (cx - 19, 17), icon_img)
                     
-                # 3. High / Low temperatures
+                # 3. High / Low temperatures (increased to 10px font, y=63)
                 t_max = max_temps[i] if i < len(max_temps) else 0
                 t_min = min_temps[i] if i < len(min_temps) else 0
                 
                 # Draw high temp
                 draw.text(
-                    (cx - 3, 58),
+                    (cx - 4, 63),
                     f"{int(t_max)}°",
-                    font=font_text_temp,
+                    font=font_small_temp,
                     fill=text_color_temp,
                     anchor="rm",
-                    stroke_width=max(1, round(outline_width_temp * 8 / 28)) if outline_width_temp > 0 else 0,
+                    stroke_width=max(1, round(outline_width_temp * 10 / 28)) if outline_width_temp > 0 else 0,
                     stroke_fill=outline_color_temp
                 )
                 
@@ -1838,12 +1840,12 @@ class Weather(ActionBase):
                     255
                 )
                 draw.text(
-                    (cx, 58),
+                    (cx, 63),
                     "/",
-                    font=font_text,
+                    font=font_small_text,
                     fill=slash_color,
                     anchor="mm",
-                    stroke_width=max(1, round(outline_width_loc * 8 / 12)) if outline_width_loc > 0 else 0,
+                    stroke_width=max(1, round(outline_width_loc * 10 / 12)) if outline_width_loc > 0 else 0,
                     stroke_fill=outline_color_loc
                 )
                 
@@ -1856,26 +1858,26 @@ class Weather(ActionBase):
                 )
                 low_temp_color = tuple(min(255, max(0, val)) for val in low_temp_color)
                 draw.text(
-                    (cx + 3, 58),
+                    (cx + 4, 63),
                     f"{int(t_min)}°",
-                    font=font_text_temp,
+                    font=font_small_temp,
                     fill=low_temp_color,
                     anchor="lm",
-                    stroke_width=max(1, round(outline_width_temp * 8 / 28)) if outline_width_temp > 0 else 0,
+                    stroke_width=max(1, round(outline_width_temp * 10 / 28)) if outline_width_temp > 0 else 0,
                     stroke_fill=outline_color_temp
                 )
                 
-                # 4. Precipitation Percentage (Pre. {val}%)
+                # 4. Precipitation Percentage (increased to 10px font, y=77)
                 precip_val = precip_chances[i] if i < len(precip_chances) else 0
                 precip_text = f"Pre. {int(precip_val)}%"
                 precip_color = (100, 180, 255, 255) if precip_val > 0 else (170, 170, 170, 255)
                 draw.text(
-                    (cx, 74),
+                    (cx, 77),
                     precip_text,
-                    font=font_text_temp,
+                    font=font_small_temp,
                     fill=precip_color,
                     anchor="mm",
-                    stroke_width=max(1, round(outline_width_temp * 8 / 28)) if outline_width_temp > 0 else 0,
+                    stroke_width=max(1, round(outline_width_temp * 10 / 28)) if outline_width_temp > 0 else 0,
                     stroke_fill=outline_color_temp
                 )
                 
