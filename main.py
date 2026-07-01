@@ -809,7 +809,7 @@ class Weather(ActionBase):
         ]
         if is_dial:
             rows.append(self.cycle_row)
-        rows.extend([self.temp_expander, self.loc_expander])
+        rows.extend([self.loc_expander])
         return rows
 
     def load_units_model(self):
@@ -1686,27 +1686,20 @@ class Weather(ActionBase):
         draw = ImageDraw.Draw(canvas)
         
         settings = self.get_settings()
-        font_desc_temp = settings.get("font_desc_temp", "DejaVu Sans Bold 16")
+        font_desc_temp = "DejaVu Sans Bold 16"
         font_desc_loc = settings.get("font_desc_loc", "DejaVu Sans Bold 9")
 
         # Get Text and Outline Colors/Widths
-        outline_width_temp = int(settings.get("outline_width_temp", 1))
-        outline_color_temp = tuple(settings.get("outline_color_temp", [0, 0, 0, 255]))
-        text_color_temp = tuple(settings.get("text_color_temp", [255, 255, 255, 255]))
+        outline_width_temp = 1
+        outline_color_temp = (0, 0, 0, 255)
+        text_color_temp = (255, 255, 255, 255)
 
         outline_width_loc = int(settings.get("outline_width_loc", 1))
         outline_color_loc = tuple(settings.get("outline_color_loc", [0, 0, 0, 255]))
         text_color_loc = tuple(settings.get("text_color_loc", [255, 255, 255, 255]))
 
         # Calculate scale factors from default sizes
-        try:
-            desc_temp = Pango.FontDescription.from_string(font_desc_temp)
-            temp_base_size = desc_temp.get_size() / Pango.SCALE
-            if temp_base_size <= 0:
-                temp_base_size = 16.0
-        except Exception:
-            temp_base_size = 16.0
-        temp_scale = temp_base_size / 16.0
+        temp_scale = 1.0
 
         try:
             desc_loc = Pango.FontDescription.from_string(font_desc_loc)
@@ -1718,10 +1711,10 @@ class Weather(ActionBase):
         loc_scale = loc_base_size / 9.0
 
         # Resolve scaled fonts
-        font_large = self.resolve_font_from_desc(font_desc_temp, 28, override_size=int(28 * temp_scale))
-        font_medium_temp = self.resolve_font_from_desc(font_desc_temp, 12, override_size=int(12 * temp_scale))
-        font_text_temp = self.resolve_font_from_desc(font_desc_temp, 8, override_size=int(8 * temp_scale))
-        font_small_temp = self.resolve_font_from_desc(font_desc_temp, 10, override_size=int(10 * temp_scale))
+        font_large = self.resolve_font_from_desc(font_desc_temp, 28, override_size=28)
+        font_medium_temp = self.resolve_font_from_desc(font_desc_temp, 12, override_size=12)
+        font_text_temp = self.resolve_font_from_desc(font_desc_temp, 8, override_size=8)
+        font_small_temp = self.resolve_font_from_desc(font_desc_temp, 10, override_size=10)
 
         font_medium = self.resolve_font_from_desc(font_desc_loc, 12, override_size=int(12 * loc_scale))
         font_title = self.resolve_font_from_desc(font_desc_loc, 10, override_size=int(10 * loc_scale))
@@ -1785,13 +1778,10 @@ class Weather(ActionBase):
             
             temp_text = f"{int(temp)}{temp_unit}"
             
-            # Temperature layout
-            temp_halign = parse_halign(settings.get("temp_halign"), 0.0)
-            temp_valign = parse_valign(settings.get("temp_valign"), 0.0)
-            
-            tx_coords = {"left": 95, "center": 140, "right": 185}
-            ty_coords = {"top": 15, "middle": 30, "bottom": 45}
-            tx, ty, t_anchor = get_text_layout(temp_halign, temp_valign, tx_coords, ty_coords)
+            # Temperature layout (static position)
+            tx = 140
+            ty = 36
+            t_anchor = "mm"
             
             draw.text((tx, ty), temp_text, font=font_large, fill=text_color_temp, stroke_width=outline_width_temp, stroke_fill=outline_color_temp, anchor=t_anchor)
             
@@ -2064,16 +2054,16 @@ class Weather(ActionBase):
             ix, iy = get_icon_layout(0.0, 1.0, width, height, icon_w, icon_h, h_offsets=(10, 10), v_offsets=(12, 12))
             canvas.paste(icon_img, (ix, iy), icon_img)
             
-        font_desc_temp = action_settings.get("font_desc_temp", "DejaVu Sans Bold 16")
+        font_desc_temp = "DejaVu Sans Bold 16"
         font_desc_loc = action_settings.get("font_desc_loc", "DejaVu Sans Bold 9")
         
-        outline_width_temp = int(action_settings.get("outline_width_temp", 1))
+        outline_width_temp = 1
         outline_width_loc = int(action_settings.get("outline_width_loc", 1))
         
-        outline_color_temp = tuple(action_settings.get("outline_color_temp", [0, 0, 0, 255]))
+        outline_color_temp = (0, 0, 0, 255)
         outline_color_loc = tuple(action_settings.get("outline_color_loc", [0, 0, 0, 255]))
         
-        text_color_temp = tuple(action_settings.get("text_color_temp", [255, 255, 255, 255]))
+        text_color_temp = (255, 255, 255, 255)
         text_color_loc = tuple(action_settings.get("text_color_loc", [255, 255, 255, 255]))
 
         font_temp = self.resolve_font_from_desc(font_desc_temp, 16)
@@ -2083,13 +2073,10 @@ class Weather(ActionBase):
 
         temp_text = f"{int(temp)}{temp_unit}"
         
-        # Temperature layout on Button
-        temp_halign = parse_halign(action_settings.get("temp_halign"), 0.0)
-        temp_valign = parse_valign(action_settings.get("temp_valign"), 0.0)
-        
-        tx_coords = {"left": 15, "center": width / 2, "right": width - 15}
-        ty_coords = {"top": 56, "middle": 68, "bottom": 80}
-        tx, ty, t_anchor = get_text_layout(temp_halign, temp_valign, tx_coords, ty_coords)
+        # Temperature layout on Button (static position)
+        tx = width / 2
+        ty = 68
+        t_anchor = "mm"
         
         draw.text((tx, ty), temp_text, font=font_temp, fill=text_color_temp, stroke_width=outline_width_temp, stroke_fill=outline_color_temp, anchor=t_anchor)
         
