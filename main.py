@@ -1357,7 +1357,7 @@ class Weather(ActionBase):
             "latitude": lat,
             "longitude": lon,
             "current": ["weather_code", "is_day", "temperature_2m"],
-            "daily": ["weather_code", "temperature_2m_max", "temperature_2m_min"],
+            "daily": ["weather_code", "temperature_2m_max", "temperature_2m_min", "precipitation_probability_max"],
             "hourly": ["temperature_2m"],
             "timezone": "auto"
         }
@@ -1395,7 +1395,8 @@ class Weather(ActionBase):
             "days": days,
             "codes": data["daily"]["weather_code"],
             "max_temps": data["daily"]["temperature_2m_max"],
-            "min_temps": data["daily"]["temperature_2m_min"]
+            "min_temps": data["daily"]["temperature_2m_min"],
+            "precipitation_probability": data["daily"].get("precipitation_probability_max", [0]*7)
         }
         
         # Parse hourly forecast
@@ -1484,12 +1485,16 @@ class Weather(ActionBase):
         codes = []
         max_temps = []
         min_temps = []
+        precip_probs = []
         
         for date_str in sorted(days_dict.keys())[:5]:
             items = days_dict[date_str]
             temps = [x["main"]["temp"] for x in items]
             max_temps.append(max(temps))
             min_temps.append(min(temps))
+            
+            day_pops = [x.get("pop", 0) for x in items]
+            precip_probs.append(int(max(day_pops) * 100) if day_pops else 0)
             
             midday_item = items[len(items) // 2]
             for item in items:
@@ -1508,7 +1513,8 @@ class Weather(ActionBase):
             "days": days,
             "codes": codes,
             "max_temps": max_temps,
-            "min_temps": min_temps
+            "min_temps": min_temps,
+            "precipitation_probability": precip_probs
         }
         
         sampled_times = []
@@ -1593,23 +1599,36 @@ class Weather(ActionBase):
         codes = []
         max_temps = []
         min_temps = []
+        precip_probs = []
         
         day_names = daily_data_raw.get("dayOfWeek", [])
         icon_codes = daily_data_raw.get("calendarDayIconCode", [])
         t_max_list = daily_data_raw.get("temperatureMax", [])
         t_min_list = daily_data_raw.get("temperatureMin", [])
         
+        dayparts = daily_data_raw.get("daypart", [])
+        precip_chances = []
+        if dayparts and isinstance(dayparts, list) and len(dayparts) > 0:
+            precip_chances = dayparts[0].get("precipChance", [])
+            
         for i in range(min(5, len(day_names))):
             days.append(day_names[i][:3])
             codes.append(twc_to_wmo(icon_codes[i] if i < len(icon_codes) else 0))
             max_temps.append(t_max_list[i] if i < len(t_max_list) else 0)
             min_temps.append(t_min_list[i] if i < len(t_min_list) else 0)
             
+            d_idx = 2 * i
+            n_idx = 2 * i + 1
+            d_chance = precip_chances[d_idx] if (d_idx < len(precip_chances) and precip_chances[d_idx] is not None) else 0
+            n_chance = precip_chances[n_idx] if (n_idx < len(precip_chances) and precip_chances[n_idx] is not None) else 0
+            precip_probs.append(max(d_chance, n_chance))
+            
         daily_data = {
             "days": days,
             "codes": codes,
             "max_temps": max_temps,
-            "min_temps": min_temps
+            "min_temps": min_temps,
+            "precipitation_probability": precip_probs
         }
         
         times_raw = hourly_data_raw.get("validTimeLocal", [])
@@ -1765,29 +1784,100 @@ class Weather(ActionBase):
             draw.text((lx, ly), location_name, font=font_medium, fill=text_color_loc, stroke_width=outline_width_loc, stroke_fill=outline_color_loc, anchor=l_anchor)
             
         elif page == 1:
-            # 5-Day Page
+            # 3-Day Page
             daily = weather_data.get("daily", {})
-            days = daily.get("days", [])[:5]
-            codes = daily.get("codes", [])[:5]
-            max_temps = daily.get("max_temps", [])[:5]
+            days = daily.get("days", [])[:3]
+            codes = daily.get("codes", [])[:3]
+            max_temps = daily.get("max_temps", [])[:3]
+            min_temps = daily.get("min_temps", [])[:3]
+            precip_chances = daily.get("precipitation_probability", [])[:3]
             
-            col_width = 36
-            start_x = 28
+            centers = [34, 100, 166]
             for i in range(len(days)):
-                cx = start_x + i * col_width
+                cx = centers[i]
                 
+                # 1. Day label
                 day_label = f"{days[i]}." if days[i] else ""
-                draw.text((cx, 16), day_label, font=font_text, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 8 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
+                draw.text(
+                    (cx, 12),
+                    day_label,
+                    font=font_text,
+                    fill=text_color_loc,
+                    anchor="mm",
+                    stroke_width=max(1, round(outline_width_loc * 8 / 12)) if outline_width_loc > 0 else 0,
+                    stroke_fill=outline_color_loc
+                )
                 
+                # 2. Weather Icon
                 code = codes[i] if i < len(codes) else 0
                 image_name = self.get_image_to_show(code, False)
-                icon_img = self.get_resized_icon(image_name, (28, 28))
+                icon_img = self.get_resized_icon(image_name, (32, 32))
                 if icon_img:
-                    canvas.paste(icon_img, (cx - 14, 25), icon_img)
+                    canvas.paste(icon_img, (cx - 16, 18), icon_img)
                     
+                # 3. Precipitation Percentage
+                precip_val = precip_chances[i] if i < len(precip_chances) else 0
+                precip_text = f"{int(precip_val)}%"
+                precip_color = (100, 180, 255, 255) if precip_val > 0 else (170, 170, 170, 255)
+                draw.text(
+                    (cx, 56),
+                    precip_text,
+                    font=font_text_temp,
+                    fill=precip_color,
+                    anchor="mm",
+                    stroke_width=max(1, round(outline_width_temp * 8 / 28)) if outline_width_temp > 0 else 0,
+                    stroke_fill=outline_color_temp
+                )
+                
+                # 4. High / Low temperatures
                 t_max = max_temps[i] if i < len(max_temps) else 0
-                temp_text = f"{int(t_max)}°"
-                draw.text((cx, 68), temp_text, font=font_medium_temp, fill=text_color_temp, anchor="mm", stroke_width=max(1, round(outline_width_temp * 12 / 28)) if outline_width_temp > 0 else 0, stroke_fill=outline_color_temp)
+                t_min = min_temps[i] if i < len(min_temps) else 0
+                
+                # Draw high temp
+                draw.text(
+                    (cx - 3, 72),
+                    f"{int(t_max)}°",
+                    font=font_text_temp,
+                    fill=text_color_temp,
+                    anchor="rm",
+                    stroke_width=max(1, round(outline_width_temp * 8 / 28)) if outline_width_temp > 0 else 0,
+                    stroke_fill=outline_color_temp
+                )
+                
+                # Draw slash
+                slash_color = (
+                    int((text_color_temp[0] + text_color_loc[0]) / 2),
+                    int((text_color_temp[1] + text_color_loc[1]) / 2),
+                    int((text_color_temp[2] + text_color_loc[2]) / 2),
+                    255
+                )
+                draw.text(
+                    (cx, 72),
+                    "/",
+                    font=font_text,
+                    fill=slash_color,
+                    anchor="mm",
+                    stroke_width=max(1, round(outline_width_loc * 8 / 12)) if outline_width_loc > 0 else 0,
+                    stroke_fill=outline_color_loc
+                )
+                
+                # Draw low temp
+                low_temp_color = (
+                    int(text_color_temp[0] * 0.75),
+                    int(text_color_temp[1] * 0.8),
+                    int(text_color_temp[2] * 0.95 + 10),
+                    255
+                )
+                low_temp_color = tuple(min(255, max(0, val)) for val in low_temp_color)
+                draw.text(
+                    (cx + 3, 72),
+                    f"{int(t_min)}°",
+                    font=font_text_temp,
+                    fill=low_temp_color,
+                    anchor="lm",
+                    stroke_width=max(1, round(outline_width_temp * 8 / 28)) if outline_width_temp > 0 else 0,
+                    stroke_fill=outline_color_temp
+                )
                 
         elif page == 2:
             # Hourly Page
