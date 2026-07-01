@@ -1232,8 +1232,30 @@ class Weather(ActionBase):
             self.set_center_label("")
             self.set_bottom_label("")
 
+        # Determine the timer interval.
+        # Standard interval is self.show_interval * 60 seconds.
+        # But if we are in dawn (6:00-7:00) or dusk (18:00-19:00), we override this
+        # so that we update precisely when dawn/dusk ends (i.e. at 7:00 or 19:00 respectively).
+        now = datetime.datetime.now()
+        hour = now.hour
+        timer_seconds = self.show_interval * 60.0
+        
+        if hour == 6:
+            # Dawn ends at 7:00
+            end_time = now.replace(hour=7, minute=0, second=0, microsecond=0)
+            time_until_end = (end_time - now).total_seconds()
+            if time_until_end > 0:
+                # Add 1.0 second buffer to ensure we are definitely past 7:00 when it fires
+                timer_seconds = min(timer_seconds, time_until_end + 1.0)
+        elif hour == 18:
+            # Dusk ends at 19:00
+            end_time = now.replace(hour=19, minute=0, second=0, microsecond=0)
+            time_until_end = (end_time - now).total_seconds()
+            if time_until_end > 0:
+                timer_seconds = min(timer_seconds, time_until_end + 1.0)
+
         # Launch timer
-        self.show_timer = Timer(self.show_interval * 60, self.show)
+        self.show_timer = Timer(timer_seconds, self.show)
         self.show_timer.start()
 
     def geocode_location(self, location_name) -> list[float] | None:
@@ -1719,9 +1741,9 @@ class Weather(ActionBase):
             else:
                 if not is_day:
                     time_of_day = "night"
-                elif 5 <= hour <= 7:
+                elif 6 <= hour < 7:
                     time_of_day = "dawn"
-                elif 18 <= hour <= 20:
+                elif 18 <= hour < 19:
                     time_of_day = "dusk"
                 else:
                     time_of_day = "day"
@@ -1782,6 +1804,18 @@ class Weather(ActionBase):
             lx_coords = {"left": 95, "center": 100, "right": 185}
             ly_coords = {"top": 35, "middle": 50, "bottom": 70}
             lx, ly, l_anchor = get_text_layout(loc_halign, loc_valign, lx_coords, ly_coords)
+            
+            # Align location name in the middle below the temperature
+            temp_w = draw.textlength(temp_text, font=font_large)
+            if t_anchor[0] == "l":
+                temp_center_x = tx + temp_w / 2
+            elif t_anchor[0] == "r":
+                temp_center_x = tx - temp_w / 2
+            else:
+                temp_center_x = tx
+            
+            lx = temp_center_x
+            l_anchor = "m" + l_anchor[1]
             
             draw.text((lx, ly), location_name, font=font_medium, fill=text_color_loc, stroke_width=outline_width_loc, stroke_fill=outline_color_loc, anchor=l_anchor)
             
@@ -1999,9 +2033,9 @@ class Weather(ActionBase):
         else:
             if not is_day:
                 time_of_day = "night"
-            elif 5 <= hour <= 7:
+            elif 6 <= hour < 7:
                 time_of_day = "dawn"
-            elif 18 <= hour <= 20:
+            elif 18 <= hour < 19:
                 time_of_day = "dusk"
             else:
                 time_of_day = "day"
@@ -2071,6 +2105,18 @@ class Weather(ActionBase):
         lx_coords = {"left": 15, "center": width / 2, "right": width - 15}
         ly_coords = {"top": 76, "middle": 88, "bottom": 100}
         lx, ly, l_anchor = get_text_layout(loc_halign, loc_valign, lx_coords, ly_coords)
+        
+        # Align location name in the middle below the temperature
+        temp_w = draw.textlength(temp_text, font=font_temp)
+        if t_anchor[0] == "l":
+            temp_center_x = tx + temp_w / 2
+        elif t_anchor[0] == "r":
+            temp_center_x = tx - temp_w / 2
+        else:
+            temp_center_x = tx
+        
+        lx = temp_center_x
+        l_anchor = "m" + l_anchor[1]
         
         loc_display = location_name
         if len(loc_display) > 16:
