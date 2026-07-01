@@ -2060,7 +2060,7 @@ class Weather(ActionBase):
         text_color_temp = (255, 255, 255, 255)
         text_color_loc = tuple(action_settings.get("text_color_loc", [255, 255, 255, 255]))
 
-        font_temp = self.resolve_font_from_desc(font_desc_temp, 16)
+        font_temp = self.resolve_font_from_desc(font_desc_temp, 22)
         font_loc = self.resolve_font_from_desc(font_desc_loc, 9)
 
         draw = ImageDraw.Draw(canvas)
@@ -2069,7 +2069,7 @@ class Weather(ActionBase):
         
         # Temperature layout on Button (static position)
         tx = width / 2
-        ty = 68
+        ty = 70
         t_anchor = "mm"
         
         draw.text((tx, ty), temp_text, font=font_temp, fill=text_color_temp, stroke_width=outline_width_temp, stroke_fill=outline_color_temp, anchor=t_anchor)
