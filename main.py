@@ -1717,8 +1717,8 @@ class Weather(ActionBase):
         font_small_temp = self.resolve_font_from_desc(font_desc_temp, 10, override_size=10)
 
         font_medium = self.resolve_font_from_desc(font_desc_loc, 12, override_size=int(12 * loc_scale))
-        font_title = self.resolve_font_from_desc(font_desc_loc, 10, override_size=int(10 * loc_scale))
-        font_text = self.resolve_font_from_desc(font_desc_loc, 8, override_size=int(8 * loc_scale))
+        font_title = self.resolve_font_from_desc("DejaVu Sans Bold 10", 10, override_size=10)
+        font_text = self.resolve_font_from_desc("DejaVu Sans Bold 8", 8, override_size=8)
         font_small_text = self.resolve_font_from_desc("DejaVu Sans Bold 10", 10, override_size=10)
 
         current = weather_data.get("current", {})
@@ -1899,7 +1899,7 @@ class Weather(ActionBase):
                 
         elif page == 2:
             # Hourly Page
-            draw.text((100, 14), "Hourly Forecast", font=font_title, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 10 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
+            draw.text((100, 14), "Hourly Forecast", font=font_title, fill=(255, 255, 255, 255), anchor="mm", stroke_width=1, stroke_fill=(0, 0, 0, 255))
             
             hourly = weather_data.get("hourly", {})
             times = hourly.get("times", [])[:24]
@@ -1931,7 +1931,7 @@ class Weather(ActionBase):
                 for idx in x_labels:
                     if idx < len(times):
                         px = int(graph_x_start + idx * dx)
-                        draw.text((px, 74), times[idx], font=font_text, fill=text_color_loc, anchor="mm", stroke_width=max(1, round(outline_width_loc * 8 / 12)) if outline_width_loc > 0 else 0, stroke_fill=outline_color_loc)
+                        draw.text((px, 74), times[idx], font=font_text, fill=(255, 255, 255, 255), anchor="mm", stroke_width=1, stroke_fill=(0, 0, 0, 255))
                         
         dot_y = 92
         dot_spacing = 10
