@@ -1719,7 +1719,7 @@ class Weather(ActionBase):
         font_medium = self.resolve_font_from_desc(font_desc_loc, 12, override_size=int(12 * loc_scale))
         font_title = self.resolve_font_from_desc(font_desc_loc, 10, override_size=int(10 * loc_scale))
         font_text = self.resolve_font_from_desc(font_desc_loc, 8, override_size=int(8 * loc_scale))
-        font_small_text = self.resolve_font_from_desc(font_desc_loc, 10, override_size=int(10 * loc_scale))
+        font_small_text = self.resolve_font_from_desc("DejaVu Sans Bold 10", 10, override_size=10)
 
         current = weather_data.get("current", {})
         is_day = current.get("is_day", True)
@@ -1826,10 +1826,10 @@ class Weather(ActionBase):
                     (cx, 11),
                     day_label,
                     font=font_small_text,
-                    fill=text_color_loc,
+                    fill=(255, 255, 255, 255),
                     anchor="mm",
-                    stroke_width=max(1, round(outline_width_loc * 10 / 12)) if outline_width_loc > 0 else 0,
-                    stroke_fill=outline_color_loc
+                    stroke_width=1,
+                    stroke_fill=(0, 0, 0, 255)
                 )
                 
                 # 2. Weather Icon (increased to 38x38, y=17 to 55)
@@ -1855,20 +1855,14 @@ class Weather(ActionBase):
                 )
                 
                 # Draw slash
-                slash_color = (
-                    int((text_color_temp[0] + text_color_loc[0]) / 2),
-                    int((text_color_temp[1] + text_color_loc[1]) / 2),
-                    int((text_color_temp[2] + text_color_loc[2]) / 2),
-                    255
-                )
                 draw.text(
                     (cx, 63),
                     "/",
                     font=font_small_text,
-                    fill=slash_color,
+                    fill=(255, 255, 255, 255),
                     anchor="mm",
-                    stroke_width=max(1, round(outline_width_loc * 10 / 12)) if outline_width_loc > 0 else 0,
-                    stroke_fill=outline_color_loc
+                    stroke_width=1,
+                    stroke_fill=(0, 0, 0, 255)
                 )
                 
                 # Draw low temp
