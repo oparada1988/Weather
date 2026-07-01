@@ -236,15 +236,35 @@ class WindDirection(ActionBase):
 
     def on_lat_changed(self, entry, text):
         settings = self.get_settings()
-        settings["lat"] = entry.get_text()
+        val = entry.get_text()
+        settings["lat"] = val
         self.set_settings(settings)
-        self.trigger_debounced_show()
+        
+        try:
+            float(val)
+            lon_val = settings.get("lon", "")
+            float(lon_val)
+            if hasattr(self, "debounce_timer") and self.debounce_timer is not None:
+                self.debounce_timer.cancel()
+            self.show_async(force=True)
+        except ValueError:
+            pass
     
     def on_lon_changed(self, entry, *args):
         settings = self.get_settings()
-        settings["lon"] = entry.get_text()
+        val = entry.get_text()
+        settings["lon"] = val
         self.set_settings(settings)
-        self.trigger_debounced_show()
+        
+        try:
+            float(val)
+            lat_val = settings.get("lat", "")
+            float(lat_val)
+            if hasattr(self, "debounce_timer") and self.debounce_timer is not None:
+                self.debounce_timer.cancel()
+            self.show_async(force=True)
+        except ValueError:
+            pass
 
     def on_units_changed(self, combo_box, *args):
         unit = self.units_model[combo_box.get_active()][1]
@@ -321,7 +341,7 @@ class WindDirection(ActionBase):
 
         wind_data = self.get_wind_data(force=force)
         if wind_data is None:
-            self.show_error()
+            log.warning("Could not retrieve wind data")
             return
         
         wind_direction, wind_speed, wind_speed_unit = wind_data
@@ -336,7 +356,6 @@ class WindDirection(ActionBase):
             self.set_media(image=image, size=0.85, valign=-1)
         except Exception as e:
             log.error(f"Error drawing wind icon: {e}")
-            self.show_error()
 
         # Launch timer
         self.show_timer = Timer(self.show_interval * 60, self.show)
@@ -827,15 +846,35 @@ class Weather(ActionBase):
 
     def on_lat_changed(self, entry, *args):
         settings = self.get_settings()
-        settings["lat"] = entry.get_text()
+        val = entry.get_text()
+        settings["lat"] = val
         self.set_settings(settings)
-        self.trigger_debounced_show()
+        
+        try:
+            float(val)
+            lon_val = settings.get("lon", "")
+            float(lon_val)
+            if hasattr(self, "debounce_timer") and self.debounce_timer is not None:
+                self.debounce_timer.cancel()
+            self.show_async(force=True)
+        except ValueError:
+            pass
     
     def on_lon_changed(self, entry, *args):
         settings = self.get_settings()
-        settings["lon"] = entry.get_text()
+        val = entry.get_text()
+        settings["lon"] = val
         self.set_settings(settings)
-        self.trigger_debounced_show()
+        
+        try:
+            float(val)
+            lat_val = settings.get("lat", "")
+            float(lat_val)
+            if hasattr(self, "debounce_timer") and self.debounce_timer is not None:
+                self.debounce_timer.cancel()
+            self.show_async(force=True)
+        except ValueError:
+            pass
 
     def on_loc_changed(self, entry, *args):
         settings = self.get_settings()
@@ -1211,7 +1250,7 @@ class Weather(ActionBase):
 
         weather = self.get_weather(force=force)
         if weather is None:
-            self.show_error()
+            log.warning("Could not retrieve weather data")
             return
         
         is_dial = isinstance(self.input_ident, Input.Dial)
@@ -2060,7 +2099,7 @@ class Weather(ActionBase):
         text_color_temp = (255, 255, 255, 255)
         text_color_loc = tuple(action_settings.get("text_color_loc", [255, 255, 255, 255]))
 
-        font_temp = self.resolve_font_from_desc(font_desc_temp, 22)
+        font_temp = self.resolve_font_from_desc(font_desc_temp, 26)
         font_loc = self.resolve_font_from_desc(font_desc_loc, 9)
 
         draw = ImageDraw.Draw(canvas)
@@ -2069,7 +2108,7 @@ class Weather(ActionBase):
         
         # Temperature layout on Button (static position)
         tx = width / 2
-        ty = 70
+        ty = 73
         t_anchor = "mm"
         
         draw.text((tx, ty), temp_text, font=font_temp, fill=text_color_temp, stroke_width=outline_width_temp, stroke_fill=outline_color_temp, anchor=t_anchor)
